@@ -3,6 +3,9 @@
   この HTML にはサーバー側のデータを一切埋め込まない。
   Cockpit モジュールにはサーバーが存在しないため、埋め込んだ瞬間に
   同じ画面を共有できなくなる。データは全て transport.js 経由で取得する。
+
+  画面の概念は「パス」と「時点」の 2 つだけ。機能ごとにタブを分けると、
+  同じ「過去を見る」操作を複数の場所で覚えることになるため、増やさない。
 -->
 <html lang="en">
 <head>
@@ -23,6 +26,10 @@
 <main>
   <section id="browser" aria-labelledby="browser-title">
     <h2 id="browser-title"></h2>
+    <p id="time-state">
+      <span id="time-label"></span>
+      <button type="button" id="time-reset" hidden></button>
+    </p>
     <nav id="breadcrumbs"></nav>
     <ul id="entries"></ul>
   </section>
@@ -30,12 +37,23 @@
   <section id="timeline" aria-labelledby="timeline-title">
     <h2 id="timeline-title"></h2>
     <p id="timeline-target" class="path"></p>
+    <p id="timeline-hint" class="note" hidden></p>
     <table id="versions">
       <thead><tr id="versions-head"></tr></thead>
       <tbody id="versions-body"></tbody>
     </table>
     <div id="preview-box" hidden>
-      <h3 id="preview-title"></h3>
+      <div id="preview-header">
+        <h3 id="preview-title"></h3>
+        <span id="preview-modes">
+          <button type="button" id="mode-content" class="mode"></button>
+          <button type="button" id="mode-diff" class="mode"></button>
+        </span>
+        <label id="diff-against-label" hidden>
+          <span id="diff-against-text"></span>
+          <select id="diff-against"></select>
+        </label>
+      </div>
       <p id="preview-note" class="note"></p>
       <pre id="preview"></pre>
     </div>

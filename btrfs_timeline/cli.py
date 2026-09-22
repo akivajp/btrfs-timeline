@@ -27,6 +27,7 @@ from typing import Any, Optional
 
 from . import __version__, i18n
 from .core import browse as browse_module
+from .core import diff as diff_module
 from .core import history as history_module
 from .core import mounts as mounts_module
 from .core import restore as restore_module
@@ -138,6 +139,7 @@ def entry_to_dict(entry: browse_module.Entry) -> dict:
         'name': entry.name, 'path': entry.path,
         'is_directory': entry.is_directory, 'is_symlink': entry.is_symlink,
         'size': entry.size, 'mtime': _isoformat(entry.mtime),
+        'exists_now': entry.exists_now,
     }
 
 
@@ -309,8 +311,25 @@ def cmd_browse(args: argparse.Namespace) -> int:
     (Cockpit 版はサーバーを持てないので、この ``--json`` 出力が唯一の経路になる)。
     """
     target = os.path.abspath(args.path)
+    snapshot = None
     try:
-        entries = browse_module.list_directory(target, show_hidden=not args.no_hidden)
+        if args.snapshot:
+            mount = mounts_module.find_containing_mount(target)
+            if mount is None:
+                print(_('error.prefix', message=_('error.no-btrfs-mount', path=target)),
+                      file=sys.stderr)
+                return 1
+            snapshot = next((s for s in snapshots_module.discover(mount)
+                             if s.id == args.snapshot), None)
+            if snapshot is None:
+                print(_('error.prefix',
+                        message=_('error.snapshot-not-found', id=args.snapshot)),
+                      file=sys.stderr)
+                return 1
+            entries = browse_module.list_directory_at(
+                target, snapshot, mount=mount, show_hidden=not args.no_hidden)
+        else:
+            entries = browse_module.list_directory(target, show_hidden=not args.no_hidden)
     except OSError as error:
         print(_('error.prefix', message=error), file=sys.stderr)
         return 1
@@ -320,14 +339,73 @@ def cmd_browse(args: argparse.Namespace) -> int:
             'path': target,
             'parents': browse_module.parents(target),
             'entries': [entry_to_dict(e) for e in entries],
+            'snapshot': snapshot_to_dict(snapshot) if snapshot else None,
         })
         return 0
 
     for entry in entries:
         name = entry.name + ('/' if entry.is_directory else '')
+        # 現在は存在しない項目には印を付ける。過去の時点を見る意味の大半がここにある
+        if not entry.exists_now:
+            name += '  ' + _('browse.deleted')
         print(_row([_human_size(None if entry.is_directory else entry.size),
                     _local(entry.mtime), name],
                    columns=((10, '>'), (20, '<'))))
+    return 0
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    """2 つの版の差分を表示する。既定では「選んだ版 → 現在」。"""
+    target = os.path.abspath(args.path)
+    try:
+        versions = history_module.list_versions(target)
+    except LookupError:
+        _fail('error.no-btrfs-mount', path=target)
+        return 1
+
+    numbered = list(enumerate(versions, start=1))
+
+    def pick(index, default_live):
+        """版番号から版を選ぶ。差分では live 版も比較相手にできる。"""
+        if index is None:
+            if default_live:
+                live = [(i, v) for i, v in numbered if v.is_live]
+                if live:
+                    return live[-1]
+            return history_module.select_version(versions, None)
+        selected = [(i, v) for i, v in numbered if i == index]
+        if not selected:
+            raise LookupError(_('error.version-not-found', index=index))
+        return selected[0]
+
+    try:
+        before_index, before = pick(args.from_index, False)
+        after_index, after = pick(args.to_index, True)
+    except LookupError as error:
+        print(_('error.prefix', message=error), file=sys.stderr)
+        return 1
+
+    result = diff_module.unified(
+        before.path, after.path,
+        before_label='#{0}'.format(before_index), after_label='#{0}'.format(after_index))
+
+    if args.json:
+        _emit_json({
+            'path': target, 'from': before_index, 'to': after_index,
+            'text': result.text, 'identical': result.identical,
+            'binary': result.binary, 'truncated': result.truncated,
+        })
+        return 0
+
+    if result.binary:
+        print(_('diff.binary'))
+        return 0
+    if result.identical:
+        print(_('diff.identical', before=before_index, after=after_index))
+        return 0
+    sys.stdout.write(result.text)
+    if result.truncated:
+        print(_('diff.truncated'))
     return 0
 
 
@@ -428,9 +506,22 @@ def build_parser() -> argparse.ArgumentParser:
                                help=_('browse.argument.path'))
     browse_parser.add_argument('--no-hidden', action='store_true',
                                help=_('browse.option.no-hidden'))
+    browse_parser.add_argument('--snapshot', metavar='ID',
+                               help=_('browse.option.snapshot'))
     browse_parser.add_argument('--json', action='store_true', help=_('cli.option.json'))
     _add_language_option(browse_parser)
     browse_parser.set_defaults(func=cmd_browse)
+
+    # --- diff
+    diff_parser = subparsers.add_parser('diff', help=_('diff.command'))
+    diff_parser.add_argument('path', help=_('diff.argument.path'))
+    diff_parser.add_argument('--from', dest='from_index', type=int, metavar='N',
+                             help=_('diff.option.from'))
+    diff_parser.add_argument('--to', dest='to_index', type=int, metavar='N',
+                             help=_('diff.option.to'))
+    diff_parser.add_argument('--json', action='store_true', help=_('cli.option.json'))
+    _add_language_option(diff_parser)
+    diff_parser.set_defaults(func=cmd_diff)
 
     # --- serve
     serve_parser = subparsers.add_parser('serve', help=_('serve.command'))

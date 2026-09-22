@@ -19,6 +19,7 @@
   "error.path-not-found": "そのパスは存在しません: {path}",
   "error.not-a-directory": "ディレクトリではありません: {path}",
   "error.permission-denied": "読み取り権限がありません: {path}",
+  "error.not-in-snapshot": "スナップショット {id} の時点には存在しませんでした: {path}",
   "error.outside-root": "このサーバーが読み取りを許可された範囲の外です: {path}",
   "error.path-required": "パスを指定してください",
   "error.bad-request": "リクエストを解釈できませんでした",
@@ -72,7 +73,17 @@
 
   "browse.command": "ディレクトリの内容を一覧表示する",
   "browse.argument.path": "一覧するディレクトリ",
+  "browse.option.snapshot": "このスナップショットの時点の内容を一覧する",
+  "browse.deleted": "(削除済)",
   "browse.option.no-hidden": "ドットで始まる項目を表示しない",
+
+  "diff.command": "2 つの版の差分を表示する",
+  "diff.argument.path": "比較するファイル",
+  "diff.option.from": "古い側の版番号 (既定: スナップショット内の最新の版)",
+  "diff.option.to": "新しい側の版番号 (既定: 現在のファイル)",
+  "diff.identical": "版 #{before} と #{after} は同一です",
+  "diff.binary": "どちらかの版がバイナリのため、表示するものがありません",
+  "diff.truncated": "(差分を途中で打ち切りました)",
 
   "serve.command": "スタンドアロンの Web UI を起動する",
   "serve.option.host": "待ち受けアドレス (既定: {default})",
@@ -108,5 +119,17 @@
   "web.restore.confirm": "復元する",
   "web.restore.cancel": "取り消し",
   "web.restore.done": "{destination} に復元しました ({method})。",
+  "web.live": "現在",
+  "web.time.at": "{moment} 時点を表示中",
+  "web.time.reset": "現在に戻る",
+  "web.deleted": "削除済",
+  "web.open-at": "この時点を開く",
+  "web.mode.content": "内容",
+  "web.mode.diff": "差分",
+  "web.diff.against": "比較相手",
+  "web.diff.identical": "この 2 つの版に差はありません。",
+  "web.diff.binary": "どちらかの版がバイナリのため、表示するものがありません。",
+  "web.diff.truncated": "差分を途中で打ち切りました。",
+  "web.directory.hint": "これはディレクトリです。版を選ぶと、その時点の内容を表示します。",
   "web.read-only": "閲覧専用: このサーバーでは復元は無効です。"
 }

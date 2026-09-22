@@ -272,3 +272,96 @@ def test_restoring_a_symlinked_file_does_not_replace_the_link(app, tree):
     assert data['destination'] == str(tree / 'notes.txt')
     assert os.path.islink(str(link)) is True
     assert (tree / 'notes.txt').read_text(encoding='utf-8') == 'first'
+
+
+# --------------------------------------------------------------------------
+# 過去の時点のディレクトリと差分
+# --------------------------------------------------------------------------
+
+@pytest.fixture
+def deleted_tree(tree):
+    """スナップショットにだけ存在するファイルを足す。"""
+    snapshot_root = tree / '.snapshots' / '1' / 'snapshot'
+    (snapshot_root / 'draft.txt').write_text('draft', encoding='utf-8')
+    (snapshot_root / 'old-folder').mkdir()
+    return tree
+
+
+def test_past_listing_reveals_deleted_entries(deleted_tree):
+    """現在の一覧には出ないものが、過去の時点では出る。
+
+    削除したファイルに辿り着く経路は、実質これしかない。
+    """
+    app = make_app(deleted_tree)
+    now = [e['name'] for e in
+           app.get('/api/browse', {'path': str(deleted_tree)}).json['entries']]
+    assert 'draft.txt' not in now
+
+    past = app.get('/api/browse',
+                   {'path': str(deleted_tree), 'snapshot': '1'}).json
+    entries = {e['name']: e for e in past['entries']}
+    assert entries['draft.txt']['exists_now'] is False
+    assert entries['old-folder']['exists_now'] is False
+    assert entries['notes.txt']['exists_now'] is True
+    assert past['snapshot']['id'] == '1'
+
+
+def test_a_deleted_file_still_has_a_history(deleted_tree):
+    """過去の一覧から辿ったパスで、そのまま履歴を引ける。"""
+    app = make_app(deleted_tree)
+    path = str(deleted_tree / 'draft.txt')
+    versions = app.get('/api/history', {'path': path}).json['versions']
+    assert any(v['exists'] and not v['is_live'] for v in versions)
+
+
+def test_a_deleted_file_can_be_restored(deleted_tree):
+    app = make_app(deleted_tree)
+    path = str(deleted_tree / 'draft.txt')
+    data = app.post_json('/api/restore', {'path': path, 'index': 1}).json
+    assert open(data['destination'], encoding='utf-8').read() == 'draft'
+
+
+def test_unknown_snapshot_is_reported(app, tree):
+    response = app.get('/api/browse', {'path': str(tree), 'snapshot': 'nope'},
+                       expect_errors=True)
+    assert response.status_int == 404
+
+
+def test_directory_history_tracks_entries_coming_and_going(deleted_tree):
+    """ディレクトリの履歴は btrfs が保つ mtime から得られる。
+
+    ファイルの内容変更では親の mtime は動かないので、結果として
+    「項目の出入りがあった時点」だけが版として出る。欲しいのはその粒度。
+    """
+    app = make_app(deleted_tree)
+    versions = app.get('/api/history', {'path': str(deleted_tree)}).json['versions']
+    assert len(versions) >= 2
+    assert versions[-1]['is_live'] is True
+
+
+def test_diff_against_the_current_file_by_default(app, tree):
+    data = app.get('/api/diff', {'path': str(tree / 'notes.txt'), 'from': 1}).json
+    assert data['identical'] is False
+    assert '-first' in data['text']
+    assert '+live' in data['text']
+
+
+def test_diff_between_two_arbitrary_versions(app, tree):
+    data = app.get('/api/diff',
+                   {'path': str(tree / 'notes.txt'), 'from': 1, 'to': 2}).json
+    assert data['from'] == 1 and data['to'] == 2
+    assert '-first' in data['text']
+    assert '+second' in data['text']
+
+
+def test_diff_reports_identical_versions(app, tree):
+    data = app.get('/api/diff',
+                   {'path': str(tree / 'notes.txt'), 'from': 1, 'to': 1}).json
+    assert data['identical'] is True
+    assert data['text'] == ''
+
+
+def test_diff_rejects_an_unknown_version(app, tree):
+    response = app.get('/api/diff', {'path': str(tree / 'notes.txt'), 'from': 99},
+                       expect_errors=True)
+    assert response.status_int == 404

@@ -133,3 +133,77 @@ def test_parents_stop_at_the_root(tmp_path):
     _tree(tmp_path)
     chain = browse.parents(str(tmp_path / 'documents'), root=str(tmp_path))
     assert chain == [str(tmp_path), str(tmp_path / 'documents')]
+
+
+# --------------------------------------------------------------------------
+# 過去の時点のディレクトリ (削除されたものへの唯一の入口)
+# --------------------------------------------------------------------------
+
+INFO_XML = '''<?xml version="1.0"?>
+<snapshot><type>single</type><num>{num}</num><date>{date}</date><description></description></snapshot>
+'''
+
+
+def _snapshot_tree(root):
+    """スナップショットを 1 つ持つ木を作り、``(mount, snapshot)`` を返す。"""
+    from btrfs_timeline.core import mounts, snapshots
+
+    entry = root / '.snapshots' / '1'
+    content = entry / 'snapshot'
+    (content / 'documents').mkdir(parents=True)
+    (content / 'documents' / 'notes.md').write_text('notes', encoding='utf-8')
+    (content / 'documents' / 'draft.md').write_text('draft', encoding='utf-8')
+    (content / 'documents' / 'old-folder').mkdir()
+    entry.joinpath('info.xml').write_text(
+        INFO_XML.format(num=1, date='2026-01-01 00:00:00'), encoding='utf-8')
+
+    # 現在側: draft.md と old-folder は削除済み
+    (root / 'documents').mkdir()
+    (root / 'documents' / 'notes.md').write_text('notes (updated)', encoding='utf-8')
+
+    mount = mounts.MountPoint(mount_point=str(root), fs_type='btrfs',
+                              device='/dev/test', subvol='/@home', root='/@home')
+    return mount, snapshots.discover(mount)[0]
+
+
+def test_past_listing_shows_entries_deleted_since(tmp_path):
+    """削除されたものは現在の一覧に出ないので、過去の一覧だけが入口になる。"""
+    mount, snapshot = _snapshot_tree(tmp_path)
+    entries = {e.name: e for e in browse.list_directory_at(
+        str(tmp_path / 'documents'), snapshot, mount=mount)}
+
+    assert set(entries) == {'notes.md', 'draft.md', 'old-folder'}
+    assert entries['notes.md'].exists_now is True
+    assert entries['draft.md'].exists_now is False
+    assert entries['old-folder'].exists_now is False
+
+
+def test_past_listing_reports_live_paths(tmp_path):
+    """``path`` はライブ側を指す。そこから履歴や復元に進む経路を現在と揃えるため。"""
+    mount, snapshot = _snapshot_tree(tmp_path)
+    entries = {e.name: e for e in browse.list_directory_at(
+        str(tmp_path / 'documents'), snapshot, mount=mount)}
+
+    assert entries['draft.md'].path == str(tmp_path / 'documents' / 'draft.md')
+    assert '.snapshots' not in entries['draft.md'].path
+
+
+def test_past_listing_reports_the_size_at_that_time(tmp_path):
+    """サイズと更新時刻はその時点のもの (現在のものではない)。"""
+    mount, snapshot = _snapshot_tree(tmp_path)
+    entries = {e.name: e for e in browse.list_directory_at(
+        str(tmp_path / 'documents'), snapshot, mount=mount)}
+    assert entries['notes.md'].size == len('notes')
+
+
+def test_past_listing_of_a_directory_that_did_not_exist(tmp_path):
+    mount, snapshot = _snapshot_tree(tmp_path)
+    with pytest.raises(FileNotFoundError):
+        browse.list_directory_at(str(tmp_path / 'nowhere'), snapshot, mount=mount)
+
+
+def test_past_listing_respects_the_root(tmp_path):
+    mount, snapshot = _snapshot_tree(tmp_path)
+    with pytest.raises(PermissionError):
+        browse.list_directory_at(str(tmp_path.parent), snapshot, mount=mount,
+                                 root=str(tmp_path))

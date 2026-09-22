@@ -36,6 +36,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The screen is rendered in the browser and gets its data through `transport.js`, so the
   Cockpit module can reuse it by replacing that one file.
 
+- Directory history, and browsing a directory as it was at a point in time. Entries
+  deleted since then appear in that listing, which is the only way to reach them — the
+  current filesystem no longer has them. Their history and restore work as usual from
+  there. Directory versions come from the directory's own mtime, so they mark when
+  entries came and went rather than when a file inside changed.
+- `btrfs-timeline diff` and `/api/diff`: what changed between a version and the current
+  file, or between any two versions.
+- `btrfs-timeline browse --snapshot ID` and `/api/browse?snapshot=ID` for the listing at
+  a point in time, with `exists_now` on every entry.
+- The web UI now has a single time axis rather than a mode per feature: picking a
+  directory version re-lists the left pane at that moment, and the preview pane doubles
+  as the diff view.
+
 ### Changed
 
 - The `web` extra no longer needs Jinja2: the HTML carries no server-rendered data, which

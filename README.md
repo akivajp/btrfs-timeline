@@ -94,6 +94,13 @@ btrfs-timeline mounts
 # What is in this directory? (the web UI uses the same call)
 btrfs-timeline browse ~/Documents --json
 
+# What was in it back then — including what has been deleted since
+btrfs-timeline browse ~/Documents --snapshot 1729
+
+# What changed between a version and the file as it is now
+btrfs-timeline diff ~/notes.md --from 2
+btrfs-timeline diff ~/notes.md --from 2 --to 3
+
 # Open the web UI
 btrfs-timeline serve
 ```
@@ -161,6 +168,20 @@ Walk the filesystem on the left, click a file, and its versions appear on the ri
 Each version can be previewed before you decide, and restored with one button. Restoring
 always shows a dry run of exactly what it will write — and where the current content will
 be kept — before asking you to confirm.
+
+There is **one time axis, not a set of modes**. Everything the screen does is a
+combination of two things: a path, and a point in time.
+
+- Click a **directory** and you get its history too. Pick one of its versions and the
+  listing on the left becomes what that directory held at that moment.
+- Files that were **deleted since** appear there, struck through. They are invisible in
+  the current filesystem, so this is the only way to reach them — and from there their
+  history and restore work exactly as they do for any other file.
+- The preview pane doubles as a **diff**: compare a version against the current file, or
+  against any other version, with the selector next to the toggle.
+
+No tabs were added for any of this. Adding one screen per feature would mean learning the
+same "look at the past" gesture three times over.
 
 It listens on loopback only by default, and it deliberately refuses to listen on any
 other address without `--auth USER:PASSWORD` (also read from `BTRFS_TIMELINE_AUTH`),
@@ -239,8 +260,14 @@ privileges.
   never reports live content as if it were old.
 - Versions are compared by mtime and size, not by content hash. Hashing would mean
   reading every version of every file.
-- Restoring a whole directory is not supported yet — only individual files. Restoring
-  part of a tree silently would be worse than refusing.
+- Restoring a whole directory is not supported yet — only individual files. You can see
+  what a directory held at any point and restore the files out of it one by one, but
+  there is no single "put this directory back". Restoring part of a tree silently would
+  be worse than refusing.
+- A directory's history comes from the directory's own mtime, which btrfs preserves. That
+  changes when entries are added, removed or renamed — not when a file inside is edited.
+  So directory versions mark *what came and went*, which is the granularity you want for
+  finding something deleted; use the file's own history for edits.
 - A restored file keeps the original's permissions and mtime, but not its owner:
   `chown` requires root, and this tool is meant to run unprivileged.
 - btrfs RAID 5/6 is still not considered production-ready upstream; this tool does not

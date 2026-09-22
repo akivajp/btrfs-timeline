@@ -22,6 +22,7 @@ from typing import Optional
 from .. import __version__, i18n
 from ..cli import entry_to_dict, snapshot_to_dict, version_to_dict
 from ..core import browse as browse_module
+from ..core import diff as diff_module
 from ..core import history as history_module
 from ..core import mounts as mounts_module
 from ..core import restore as restore_module
@@ -56,15 +57,6 @@ class Settings:
         self.root = os.path.realpath(root) if root else None
         self.read_only = read_only
         self.preview_limit = preview_limit
-
-
-def _is_binary(chunk: bytes) -> bool:
-    """先頭を見てバイナリかどうかを判定する。
-
-    NUL バイトが含まれていればテキストではない、という古典的な判定で十分。
-    ここで厳密さを追ってもプレビューの役には立たない。
-    """
-    return b'\x00' in chunk
 
 
 def create_app(settings: Settings, credentials: Optional[Credentials] = None):
@@ -154,9 +146,30 @@ def create_app(settings: Settings, credentials: Optional[Credentials] = None):
 
     @app.route('/api/browse')
     def api_browse():
+        """ディレクトリの内容を返す。
+
+        ``snapshot`` を指定すると **その時点の内容** を返す。現在は削除されている
+        項目もそこに現れる (``exists_now`` が False)。現在の一覧だけを見ていても
+        削除されたものには辿り着けないため、これが唯一の入口になる。
+        """
+        snapshot_id = bottle.request.query.get('snapshot') or None
         try:
             path = checked_path(bottle.request.query.get('path'))
-            entries = browse_module.list_directory(path, root=settings.root)
+            snapshot = None
+            if snapshot_id:
+                mount = mounts_module.find_containing_mount(path)
+                if mount is None:
+                    return fail(404, i18n.translate('error.no-btrfs-mount', path=path))
+                snapshot = next(
+                    (s for s in snapshots_module.discover(mount) if s.id == snapshot_id),
+                    None)
+                if snapshot is None:
+                    return fail(404, i18n.translate('error.snapshot-not-found',
+                                                    id=snapshot_id))
+                entries = browse_module.list_directory_at(
+                    path, snapshot, mount=mount, root=settings.root)
+            else:
+                entries = browse_module.list_directory(path, root=settings.root)
         except PermissionError as error:
             return fail(403, error)
         except (FileNotFoundError, NotADirectoryError) as error:
@@ -167,6 +180,7 @@ def create_app(settings: Settings, credentials: Optional[Credentials] = None):
             'path': path,
             'parents': browse_module.parents(path, root=settings.root),
             'entries': [entry_to_dict(e) for e in entries],
+            'snapshot': snapshot_to_dict(snapshot) if snapshot else None,
         }
 
     @app.route('/api/snapshots')
@@ -215,22 +229,50 @@ def create_app(settings: Settings, credentials: Optional[Credentials] = None):
         except (OSError, ValueError) as error:
             return fail(400, error)
 
-        try:
-            with open(version.path, 'rb') as handle:
-                chunk = handle.read(settings.preview_limit + 1)
-        except OSError as error:
-            return fail(403, error)
-
-        truncated = len(chunk) > settings.preview_limit
-        chunk = chunk[:settings.preview_limit]
-        binary = _is_binary(chunk)
+        content = diff_module.read_text(version.path, settings.preview_limit)
         return {
             'path': version.path,
             'index': number,
             'size': version.size,
-            'binary': binary,
-            'truncated': truncated,
-            'text': '' if binary else chunk.decode('utf-8', errors='replace'),
+            'binary': content.binary,
+            'truncated': content.truncated,
+            'text': content.text,
+        }
+
+    @app.route('/api/diff')
+    def api_diff():
+        """2 つの版の差分を返す。
+
+        ``to`` を省略すると現在のファイル (live 版) と比べる。似た内容が並ぶ中から
+        戻す版を選ぶとき、知りたいのは中身そのものより **何が変わったか** である。
+        """
+        try:
+            path = checked_path(bottle.request.query.get('path'))
+            versions = history_module.list_versions(path)
+            before_index, before = _pick_any(versions, bottle.request.query.get('from'))
+            after_index, after = _pick_any(versions, bottle.request.query.get('to'),
+                                           default_live=True)
+        except PermissionError as error:
+            return fail(403, error)
+        except LookupError as error:
+            return fail(404, error)
+        except (OSError, ValueError) as error:
+            return fail(400, error)
+
+        result = diff_module.unified(
+            before.path, after.path,
+            before_label='#{0}'.format(before_index),
+            after_label='#{0}'.format(after_index),
+            limit=settings.preview_limit,
+        )
+        return {
+            'path': path,
+            'from': before_index,
+            'to': after_index,
+            'text': result.text,
+            'identical': result.identical,
+            'binary': result.binary,
+            'truncated': result.truncated,
         }
 
     @app.route('/api/restore', method='POST')
@@ -301,6 +343,28 @@ def _pick(versions, index):
     except (TypeError, ValueError):
         raise ValueError(i18n.translate('error.version-not-found', index=index))
     return history_module.select_version(versions, number)
+
+
+def _pick_any(versions, index, default_live: bool = False):
+    """差分用に版を選ぶ。``_pick`` と違い live 版も選べる。
+
+    復元元には live 版を指定できないが、比較相手としては最もよく使う。
+    """
+    numbered = list(enumerate(versions, start=1))
+    if index in (None, ''):
+        if default_live:
+            live = [(i, v) for i, v in numbered if v.is_live]
+            if live:
+                return live[-1]
+        return history_module.select_version(versions, None)
+    try:
+        number = int(index)
+    except (TypeError, ValueError):
+        raise ValueError(i18n.translate('error.version-not-found', index=index))
+    selected = [(i, v) for i, v in numbered if i == number]
+    if not selected:
+        raise LookupError(i18n.translate('error.version-not-found', index=number))
+    return selected[0]
 
 
 def is_loopback(host: str) -> bool:

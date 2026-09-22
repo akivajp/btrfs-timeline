@@ -19,6 +19,7 @@
   "error.path-not-found": "no such path: {path}",
   "error.not-a-directory": "not a directory: {path}",
   "error.permission-denied": "permission denied: {path}",
+  "error.not-in-snapshot": "this path did not exist in snapshot {id}: {path}",
   "error.outside-root": "outside the directory this server is allowed to read: {path}",
   "error.path-required": "a path is required",
   "error.bad-request": "the request could not be understood",
@@ -72,7 +73,17 @@
 
   "browse.command": "list the contents of a directory",
   "browse.argument.path": "directory to list",
+  "browse.option.snapshot": "list the directory as it was in this snapshot",
+  "browse.deleted": "(deleted since)",
   "browse.option.no-hidden": "hide entries whose name starts with a dot",
+
+  "diff.command": "show what changed between two versions",
+  "diff.argument.path": "file to compare",
+  "diff.option.from": "the older version number (default: the newest one in snapshots)",
+  "diff.option.to": "the newer version number (default: the current file)",
+  "diff.identical": "versions #{before} and #{after} are identical",
+  "diff.binary": "one of the versions is binary, so there is nothing to show",
+  "diff.truncated": "(the diff was cut short)",
 
   "serve.command": "run the standalone web UI",
   "serve.option.host": "address to listen on (default: {default})",
@@ -108,5 +119,17 @@
   "web.restore.confirm": "Restore",
   "web.restore.cancel": "Cancel",
   "web.restore.done": "Restored to {destination} ({method}).",
+  "web.live": "now",
+  "web.time.at": "Showing {moment}",
+  "web.time.reset": "Back to now",
+  "web.deleted": "deleted since",
+  "web.open-at": "Open at this time",
+  "web.mode.content": "Content",
+  "web.mode.diff": "Diff",
+  "web.diff.against": "compare with",
+  "web.diff.identical": "No change between these two versions.",
+  "web.diff.binary": "One of the versions is binary, so there is nothing to show.",
+  "web.diff.truncated": "The diff was cut short.",
+  "web.directory.hint": "This is a directory. Pick a version to see what it held at that time.",
   "web.read-only": "Read-only: restoring is disabled on this server."
 }

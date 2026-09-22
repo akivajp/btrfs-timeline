@@ -4,15 +4,29 @@
 // スタンドアロン版と Cockpit 版で共通に使える。ここに fetch や cockpit.spawn を
 // 直接書いてはいけない。
 //
+// 画面の状態は 3 つしかない。
+//   directory … 今どこを見ているか
+//   moment    … いつの状態を見ているか (null なら現在)
+//   target    … 右側に履歴を出している対象 (ファイルでもディレクトリでもよい)
+// 「削除されたファイルを探す」も「ディレクトリの中身を遡る」も、この組み合わせで
+// 表現できる。機能ごとにタブを増やすと、同じ操作を何通りも覚えることになる。
+//
 // ビルド手順を持たない方針のため、素の ES モジュールと DOM API だけで書く。
 
 import {
-  fetchConfig, fetchBrowse, fetchHistory, fetchPreview, restore,
+  fetchConfig, fetchBrowse, fetchHistory, fetchPreview, fetchDiff, restore,
 } from './transport.js';
 
 let catalog = {};
 let config = {};
-let currentTarget = null;
+
+let directory = null;
+let moment = null;          // 表示中のスナップショット (null なら現在)
+let target = null;          // 履歴を出している対象のライブパス
+let targetIsDirectory = false;
+let versions = [];
+let selectedVersion = null;
+let previewMode = 'content';
 let pendingRestore = null;
 
 const el = (id) => document.getElementById(id);
@@ -59,8 +73,23 @@ const formatSize = (size) => {
 const formatMoment = (iso) => (iso ? new Date(iso).toLocaleString() : '-');
 
 // ---------------------------------------------------------------------------
-// ディレクトリの閲覧
+// 左ペイン: ある時点のファイル一覧
 // ---------------------------------------------------------------------------
+
+const renderTimeState = () => {
+  const label = el('time-label');
+  const reset = el('time-reset');
+  if (moment) {
+    label.textContent = t('web.time.at', { moment: formatMoment(moment.taken_at) });
+    reset.textContent = t('web.time.reset');
+    reset.hidden = false;
+    document.body.classList.add('past');
+  } else {
+    label.textContent = t('web.live');
+    reset.hidden = true;
+    document.body.classList.remove('past');
+  }
+};
 
 const renderBreadcrumbs = (parents) => {
   const nav = el('breadcrumbs');
@@ -69,7 +98,6 @@ const renderBreadcrumbs = (parents) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'crumb';
-    // 先頭はルート、それ以外は末尾の名前だけを出す
     button.textContent = position === 0 ? (path === '/' ? '/' : path) : path.split('/').pop();
     button.addEventListener('click', () => openDirectory(path));
     nav.append(button);
@@ -84,18 +112,23 @@ const renderEntries = (entries) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = entry.is_directory ? 'entry directory' : 'entry file';
-    if (entry.path === currentTarget) button.classList.add('selected');
+    if (entry.path === target) button.classList.add('selected');
+    // 現在は存在しない項目。ここに現れることが、削除されたものへの唯一の入口になる
+    if (entry.exists_now === false) button.classList.add('gone');
 
     const name = document.createElement('span');
     name.className = 'name';
     name.textContent = entry.name + (entry.is_directory ? '/' : '');
     if (entry.is_symlink) name.classList.add('symlink');
 
-    const size = document.createElement('span');
-    size.className = 'size';
-    size.textContent = entry.is_directory ? '' : formatSize(entry.size);
+    const note = document.createElement('span');
+    note.className = 'size';
+    note.textContent = entry.exists_now === false
+      ? t('web.deleted')
+      : (entry.is_directory ? '' : formatSize(entry.size));
+    if (entry.exists_now === false) note.classList.add('deleted');
 
-    button.append(name, size);
+    button.append(name, note);
     button.addEventListener('click', () => {
       if (entry.is_directory) openDirectory(entry.path);
       else openFile(entry.path);
@@ -106,15 +139,38 @@ const renderEntries = (entries) => {
 };
 
 const openDirectory = async (path) => {
-  const data = await run(() => fetchBrowse(path));
+  const data = await run(() => fetchBrowse(path, moment ? moment.id : null));
   if (!data) return;
+  directory = data.path;
+  moment = data.snapshot || null;
   el('path-input').value = data.path;
+  renderTimeState();
   renderBreadcrumbs(data.parents);
+  // ディレクトリに入ったら、そのディレクトリの履歴を右に出す。
+  // btrfs はディレクトリの mtime も保存しており、項目の出入りで変化するため、
+  // ファイルと同じ仕組みのまま「いつ何が増減したか」が版として出てくる。
+  await loadHistory(data.path, true);
+  renderEntries(data.entries);
+};
+
+const goToMoment = async (snapshotId) => {
+  const data = await run(() => fetchBrowse(directory, snapshotId));
+  if (!data) return;
+  moment = data.snapshot || null;
+  renderTimeState();
+  renderEntries(data.entries);
+};
+
+const backToNow = async () => {
+  moment = null;
+  const data = await run(() => fetchBrowse(directory, null));
+  if (!data) return;
+  renderTimeState();
   renderEntries(data.entries);
 };
 
 // ---------------------------------------------------------------------------
-// 版の一覧
+// 右ペイン: 版の一覧
 // ---------------------------------------------------------------------------
 
 const stateLabel = (version) => {
@@ -124,8 +180,10 @@ const stateLabel = (version) => {
   return t(version.exists ? 'history.state.ok' : 'history.state.missing');
 };
 
-const renderVersions = (data) => {
-  el('timeline-target').textContent = data.target;
+const renderVersions = () => {
+  el('timeline-target').textContent = target;
+  el('timeline-hint').hidden = !targetIsDirectory;
+  el('timeline-hint').textContent = t('web.directory.hint');
 
   const head = el('versions-head');
   head.replaceChildren();
@@ -141,14 +199,15 @@ const renderVersions = (data) => {
 
   const body = el('versions-body');
   body.replaceChildren();
-  data.versions.forEach((version) => {
+  versions.forEach((version) => {
     const row = document.createElement('tr');
     if (version.is_live) row.classList.add('live');
+    if (moment && version.first_snapshot_id === moment.id) row.classList.add('current');
     [
       version.index,
       formatMoment(version.first_seen),
       formatMoment(version.last_seen),
-      formatSize(version.size),
+      targetIsDirectory ? '' : formatSize(version.size),
       version.snapshot_count || '-',
       stateLabel(version),
     ].forEach((value) => {
@@ -159,20 +218,32 @@ const renderVersions = (data) => {
 
     const actions = document.createElement('td');
     if (version.exists) {
-      const preview = document.createElement('button');
-      preview.type = 'button';
-      preview.textContent = t('web.preview');
-      preview.addEventListener('click', () => showPreview(data.target, version.index));
-      actions.append(preview);
+      if (targetIsDirectory) {
+        // ディレクトリの版に対してできるのは「その時点を開く」こと。
+        // 版ごとに別の意味のボタンを並べるより、1 つに絞った方が迷わない。
+        if (!version.is_live) {
+          const open = document.createElement('button');
+          open.type = 'button';
+          open.textContent = t('web.open-at');
+          open.addEventListener('click', () => goToMoment(version.first_snapshot_id));
+          actions.append(open);
+        }
+      } else {
+        const preview = document.createElement('button');
+        preview.type = 'button';
+        preview.textContent = t('web.preview');
+        preview.addEventListener('click', () => showVersion(version.index));
+        actions.append(preview);
 
-      // ライブ版を「復元」しても意味が無いので、ボタンを出さない
-      if (!version.is_live && !config.read_only) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'danger';
-        button.textContent = t('web.restore');
-        button.addEventListener('click', () => askRestore(data.target, version.index));
-        actions.append(button);
+        // ライブ版を「復元」しても意味が無いので、ボタンを出さない
+        if (!version.is_live && !config.read_only) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'danger';
+          button.textContent = t('web.restore');
+          button.addEventListener('click', () => askRestore(target, version.index));
+          actions.append(button);
+        }
       }
     }
     row.append(actions);
@@ -180,28 +251,85 @@ const renderVersions = (data) => {
   });
 };
 
-const openFile = async (path) => {
+const loadHistory = async (path, isDirectory) => {
   const data = await run(() => fetchHistory(path));
   if (!data) return;
-  currentTarget = path;
+  target = data.target;
+  targetIsDirectory = Boolean(isDirectory);
+  versions = data.versions;
+  selectedVersion = null;
   el('preview-box').hidden = true;
-  renderVersions(data);
-  // 選択状態を反映するため、一覧を描き直す
-  const directory = path.replace(/\/[^/]*$/, '') || '/';
-  const listing = await run(() => fetchBrowse(directory));
+  renderVersions();
+};
+
+const openFile = async (path) => {
+  await loadHistory(path, false);
+  // 選択状態を反映するため一覧を描き直す (時点は変えない)
+  const listing = await run(() => fetchBrowse(directory, moment ? moment.id : null));
   if (listing) renderEntries(listing.entries);
 };
 
-const showPreview = async (path, index) => {
-  const data = await run(() => fetchPreview(path, index));
-  if (!data) return;
+// ---------------------------------------------------------------------------
+// プレビューと差分 (同じ場所の表示モード切り替え)
+// ---------------------------------------------------------------------------
+
+const renderCompareOptions = () => {
+  const select = el('diff-against');
+  select.replaceChildren();
+  versions.forEach((version) => {
+    if (version.index === selectedVersion) return;
+    const option = document.createElement('option');
+    option.value = String(version.index);
+    option.textContent = version.is_live
+      ? t('web.live')
+      : `#${version.index} ${formatMoment(version.first_seen)}`;
+    select.append(option);
+  });
+  const live = versions.find((v) => v.is_live);
+  if (live && live.index !== selectedVersion) select.value = String(live.index);
+};
+
+const renderModeButtons = () => {
+  el('mode-content').textContent = t('web.mode.content');
+  el('mode-diff').textContent = t('web.mode.diff');
+  el('mode-content').classList.toggle('active', previewMode === 'content');
+  el('mode-diff').classList.toggle('active', previewMode === 'diff');
+  el('diff-against-label').hidden = previewMode !== 'diff';
+};
+
+const showVersion = async (index) => {
+  selectedVersion = index;
   el('preview-box').hidden = false;
-  el('preview-title').textContent = t('web.preview.title', { index: data.index });
+  el('preview-title').textContent = t('web.preview.title', { index });
+  renderCompareOptions();
+  renderModeButtons();
+  await refreshPreview();
+};
+
+const refreshPreview = async () => {
+  if (selectedVersion === null) return;
+  if (previewMode === 'diff') {
+    const against = el('diff-against').value;
+    const data = await run(() => fetchDiff(target, selectedVersion, against));
+    if (!data) return;
+    const notes = [];
+    if (data.identical) notes.push(t('web.diff.identical'));
+    if (data.binary) notes.push(t('web.diff.binary'));
+    if (data.truncated) notes.push(t('web.diff.truncated'));
+    el('preview-note').textContent = notes.join(' ');
+    el('preview').textContent = data.text;
+    el('preview').classList.add('diff');
+    return;
+  }
+
+  const data = await run(() => fetchPreview(target, selectedVersion));
+  if (!data) return;
   const notes = [];
   if (data.binary) notes.push(t('web.preview.binary'));
   if (data.truncated) notes.push(t('web.preview.truncated'));
   el('preview-note').textContent = notes.join(' ');
   el('preview').textContent = data.text;
+  el('preview').classList.remove('diff');
 };
 
 // ---------------------------------------------------------------------------
@@ -264,13 +392,21 @@ const applyLabels = () => {
   el('path-go').textContent = t('web.go');
   el('browser-title').textContent = t('web.browser.title');
   el('timeline-title').textContent = t('web.timeline.title');
+  el('diff-against-text').textContent = t('web.diff.against');
   el('in-place-text').textContent = t('web.restore.in-place');
   el('restore-cancel').textContent = t('web.restore.cancel');
   el('restore-confirm').textContent = t('web.restore.confirm');
+  renderModeButtons();
   if (config.read_only) {
     el('in-place-label').hidden = true;
     setStatus(t('web.read-only'));
   }
+};
+
+const setMode = (mode) => {
+  previewMode = mode;
+  renderModeButtons();
+  refreshPreview();
 };
 
 const start = async () => {
@@ -284,14 +420,18 @@ const start = async () => {
     if (!value) return;
     // ディレクトリなら移動、ファイルなら履歴を出す。
     // 利用者にどちらかを選ばせる必要は無いので、開いてみて判断する。
-    fetchBrowse(value)
-      .then((data) => {
-        renderBreadcrumbs(data.parents);
-        renderEntries(data.entries);
-        setStatus('');
-      })
-      .catch(() => openFile(value));
+    fetchBrowse(value, moment ? moment.id : null)
+      .then(() => openDirectory(value))
+      .catch(() => {
+        directory = value.replace(/\/[^/]*$/, '') || '/';
+        openFile(value);
+      });
   });
+
+  el('time-reset').addEventListener('click', backToNow);
+  el('mode-content').addEventListener('click', () => setMode('content'));
+  el('mode-diff').addEventListener('click', () => setMode('diff'));
+  el('diff-against').addEventListener('change', refreshPreview);
 
   el('restore-dialog').addEventListener('close', (event) => {
     if (event.target.returnValue === 'confirm') confirmRestore();

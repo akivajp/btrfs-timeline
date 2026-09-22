@@ -40,6 +40,13 @@ class Entry(NamedTuple):
     mtime: Optional[datetime.datetime]
     """更新時刻 (UTC)。読めなければ None"""
 
+    exists_now: bool = True
+    """現在のファイルシステムにも存在するか。
+
+    過去の時点の一覧を出したときに False になりうる。**これが削除されたものを
+    見つける唯一の手掛かり** であり、現在の一覧だけを見ていても辿り着けない。
+    """
+
 
 def is_within(path: str, root: Optional[str]) -> bool:
     """``path`` が ``root`` の内側にあるかを判定する。
@@ -61,7 +68,7 @@ def ensure_within(path: str, root: Optional[str]) -> None:
         raise PermissionError(i18n.translate('error.outside-root', path=path))
 
 
-def _entry_info(entry) -> Entry:
+def _entry_info(entry, live_path: Optional[str] = None) -> Entry:
     """``os.scandir`` の項目を ``Entry`` に変換する。
 
     ``lstat`` を使うのは履歴側と同じ理由による。リンク自体の情報を見せたいのであって、
@@ -84,9 +91,14 @@ def _entry_info(entry) -> Entry:
         is_symlink = entry.is_symlink()
     except OSError:
         is_symlink = False
+    # ``path`` には **常にライブ側のパス** を入れる。過去の時点の一覧でも、
+    # そこから履歴や復元に進む経路を現在の一覧と同じにしておきたいため
+    # (削除済みのファイルでも、ライブ側のパスを指定すれば履歴は辿れる)。
+    path = entry.path if live_path is None else live_path
     return Entry(
-        name=entry.name, path=entry.path, is_directory=is_directory,
+        name=entry.name, path=path, is_directory=is_directory,
         is_symlink=is_symlink, size=size, mtime=mtime,
+        exists_now=True if live_path is None else os.path.lexists(live_path),
     )
 
 
@@ -147,3 +159,46 @@ def parents(path: str, root: Optional[str] = None) -> list:
         current = parent
     chain.reverse()
     return chain
+
+
+def list_directory_at(path: str, snapshot, mount=None, show_hidden: bool = True,
+                      root: Optional[str] = None) -> list:
+    """``path`` が ``snapshot`` の時点で持っていた内容を返す。
+
+    現在は存在しない項目も含まれる。各項目の ``exists_now`` を見れば、
+    その後に削除されたものが分かる。
+
+    ``path`` はライブ側のパスで指定する (利用者が知っているのはそちらであり、
+    スナップショット内の実パスは実装の都合に過ぎない)。
+
+    Raises:
+        PermissionError: ``root`` の外。
+        FileNotFoundError: その時点には、そのディレクトリが無かった。
+        NotADirectoryError: その時点ではディレクトリではなかった。
+    """
+    # 循環 import を避けるため、ここで読み込む
+    # (history はディレクトリ一覧を必要としないが、こちらはパス解決を必要とする)
+    from . import history as history_module
+
+    path = os.path.abspath(path)
+    ensure_within(path, root)
+
+    snapshot_path = history_module.path_in_snapshot(snapshot, path, mount=mount)
+    if not os.path.exists(snapshot_path):
+        raise FileNotFoundError(i18n.translate(
+            'error.not-in-snapshot', path=path, id=snapshot.id))
+    if not os.path.isdir(snapshot_path):
+        raise NotADirectoryError(i18n.translate('error.not-a-directory', path=path))
+
+    try:
+        with os.scandir(snapshot_path) as scanner:
+            entries = [_entry_info(entry, live_path=os.path.join(path, entry.name))
+                       for entry in scanner]
+    except PermissionError:
+        raise PermissionError(i18n.translate('error.permission-denied', path=path))
+
+    if not show_hidden:
+        entries = [e for e in entries if not e.name.startswith('.')]
+
+    entries.sort(key=lambda e: (not e.is_directory, e.name.lower(), e.name))
+    return entries
