@@ -10,9 +10,11 @@ Web フレームワークにも CLI にも依存しない純粋な処理だけ�
 
 from .history import Version, list_versions, probe_snapshots
 from .mounts import MountPoint, find_containing_mount, read_mounts
+from .restore import RestorePlan, RestoreResult, clone_file, execute, plan_restore
 from .snapshots import Snapshot, discover
 
 __all__ = [
-    'MountPoint', 'Snapshot', 'Version',
-    'discover', 'find_containing_mount', 'list_versions', 'probe_snapshots', 'read_mounts',
+    'MountPoint', 'RestorePlan', 'RestoreResult', 'Snapshot', 'Version',
+    'clone_file', 'discover', 'execute', 'find_containing_mount', 'list_versions',
+    'plan_restore', 'probe_snapshots', 'read_mounts',
 ]
