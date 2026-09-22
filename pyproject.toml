@@ -28,14 +28,14 @@ classifiers = [
     "Topic :: System :: Filesystems",
     "Topic :: System :: Systems Administration",
 ]
-# コア機能 (CLI) は標準ライブラリだけで動く。Web UI を使うときだけ bottle/Jinja2 が要る
+# コア機能 (CLI) は標準ライブラリだけで動く。Web UI を使うときだけ bottle が要る
 dependencies = []
 
 [project.optional-dependencies]
-# スタンドアロンの Web UI
+# スタンドアロンの Web UI。画面はブラウザ側で組み立てるため、
+# テンプレートエンジンは不要 (Cockpit 版と同じ HTML を共有するための制約でもある)
 web = [
     "bottle>=0.12",
-    "Jinja2>=3.0",
 ]
 # マルチスレッドの HTTP サーバー (任意)
 server = [
@@ -44,7 +44,6 @@ server = [
 dev = [
     "pytest>=7.0",
     "bottle>=0.12",
-    "Jinja2>=3.0",
     "webtest>=3.0",
 ]
 

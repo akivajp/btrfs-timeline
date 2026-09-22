@@ -1,0 +1,167 @@
+/*
+  vendor (Bootstrap 等) を同梱しない方針。履歴の表とファイル一覧に必要なものは
+  この程度で足り、Cockpit 側は自前の PatternFly を持っているため、
+  持ち込む資産は少ないほど画面を共有しやすい。
+*/
+
+:root {
+  --bg: #ffffff;
+  --fg: #1c1c1c;
+  --muted: #6a6a6a;
+  --line: #d8d8d8;
+  --panel: #f6f6f6;
+  --accent: #1b6ac9;
+  --danger: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181a;
+    --fg: #e6e6e6;
+    --muted: #9a9a9a;
+    --line: #34363a;
+    --panel: #1f2023;
+    --accent: #6aa9f0;
+    --danger: #f2837c;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+h1 { font-size: 1.1rem; margin: 0; white-space: nowrap; }
+h2 { font-size: 0.95rem; margin: 0 0 0.5rem; color: var(--muted); }
+h3 { font-size: 0.9rem; margin: 1rem 0 0.25rem; }
+
+#path-form { display: flex; flex: 1; gap: 0.5rem; min-width: 18rem; }
+#path-input { flex: 1; }
+
+input[type="text"] {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+button {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+}
+
+button:hover { border-color: var(--accent); }
+button.danger { color: var(--danger); }
+
+main {
+  display: grid;
+  grid-template-columns: minmax(16rem, 24rem) 1fr;
+  gap: 1rem;
+  padding: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  main { grid-template-columns: 1fr; }
+}
+
+#breadcrumbs { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.5rem; }
+.crumb { padding: 0.1rem 0.4rem; font-size: 0.85rem; }
+
+#entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.entry {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.entry:hover { background: var(--panel); }
+.entry.selected { background: var(--panel); outline: 1px solid var(--accent); }
+.entry.directory .name { color: var(--accent); }
+.entry .size { color: var(--muted); white-space: nowrap; }
+.name.symlink { font-style: italic; }
+
+table { border-collapse: collapse; width: 100%; }
+
+th, td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+th { color: var(--muted); font-weight: 600; }
+tr.live td { color: var(--accent); }
+td:last-child { display: flex; gap: 0.35rem; }
+
+.path {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  word-break: break-all;
+}
+
+.note { color: var(--muted); font-size: 0.85rem; margin: 0.25rem 0; }
+.warning { color: var(--danger); }
+
+pre {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.75rem;
+  max-height: 50vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+dialog {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  max-width: min(40rem, 92vw);
+}
+
+dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+dialog dt { color: var(--muted); font-size: 0.85rem; margin-top: 0.5rem; }
+dialog dd { margin: 0; }
+dialog menu { display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0; margin: 1rem 0 0; }
+
+#status { padding: 0 1rem 1rem; color: var(--muted); min-height: 1.5rem; }
+#status.error { color: var(--danger); }

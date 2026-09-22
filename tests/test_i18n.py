@@ -10,6 +10,7 @@
 import ast
 import json
 import os
+import re
 import string
 
 import pytest
@@ -103,10 +104,29 @@ def test_catalogs_use_the_same_placeholders(language):
 
 
 def test_every_key_used_in_code_exists_in_the_catalog():
-    """コードが引いているキーが、英語カタログに揃っている。"""
+    """Python コードが引いているキーが、英語カタログに揃っている。"""
     reference = set(_load(i18n.FALLBACK_LANGUAGE))
     missing = sorted(_translated_keys() - reference)
     assert missing == []
+
+
+def test_every_key_used_in_the_web_ui_exists_in_the_catalog():
+    """ブラウザ側が引いているキーも同じカタログから来る。
+
+    Web UI は Python を通さず ``/api/config`` が返すカタログを直接引くため、
+    Python 側だけを検査しても漏れる。同じ安全網を JavaScript にも掛ける。
+    """
+    reference = set(_load(i18n.FALLBACK_LANGUAGE))
+    pattern = re.compile(r"""\bt\(\s*['"]([a-z0-9][a-z0-9.\-]*)['"]""")
+    used = set()
+    static = os.path.join(PACKAGE_DIRECTORY, 'web', 'static')
+    for name in sorted(os.listdir(static)):
+        if not name.endswith('.js'):
+            continue
+        with open(os.path.join(static, name), encoding='utf-8') as handle:
+            used.update(pattern.findall(handle.read()))
+    assert used, 'JavaScript 側のキーが 1 つも見つかりませんでした (検出漏れの疑い)'
+    assert sorted(used - reference) == []
 
 
 # --------------------------------------------------------------------------

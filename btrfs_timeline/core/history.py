@@ -169,3 +169,47 @@ def list_versions(target: str, include_live: bool = True, snapshot_list=None, mo
         ))
 
     return result
+
+
+def path_in_snapshot(snapshot, target: str, mount=None) -> str:
+    """``target`` に対応する、スナップショット内のパスを返す。
+
+    CLI と Web UI の両方が必要とするため、コアに置いてある。
+    """
+    mount = mount or mounts_module.find_containing_mount(target)
+    if mount is None:
+        raise LookupError(i18n.translate('error.no-btrfs-mount', path=target))
+    relative = mounts_module.relative_to_mount(target, mount)
+    return os.path.join(snapshot.root, relative) if relative else snapshot.root
+
+
+def select_version(versions, index: Optional[int] = None):
+    """版の一覧から、復元元にできる版を 1 つ選ぶ。
+
+    ``index`` は ``history`` が表示する 1 始まりの版番号。省略した場合は
+    「存在する最新のスナップショット版」= 直前の内容を選ぶ。
+    履歴を見ずに実行されても意図と一致する可能性が最も高い選択だからである。
+
+    Returns:
+        ``(版番号, Version)``
+
+    Raises:
+        LookupError: 選べない場合。メッセージは翻訳済みで、そのまま表示してよい。
+    """
+    numbered = list(enumerate(versions, start=1))
+
+    if index is None:
+        candidates = [(i, v) for i, v in numbered if not v.is_live and v.exists]
+        if not candidates:
+            raise LookupError(i18n.translate('error.not-in-snapshots'))
+        return candidates[-1]
+
+    selected = [(i, v) for i, v in numbered if i == index]
+    if not selected:
+        raise LookupError(i18n.translate('error.version-not-found', index=index))
+    number, version = selected[0]
+    if version.is_live:
+        raise LookupError(i18n.translate('error.live-not-restorable'))
+    if not version.exists:
+        raise LookupError(i18n.translate('error.version-missing', index=number))
+    return number, version

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<!--
+  この HTML にはサーバー側のデータを一切埋め込まない。
+  Cockpit モジュールにはサーバーが存在しないため、埋め込んだ瞬間に
+  同じ画面を共有できなくなる。データは全て transport.js 経由で取得する。
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>btrfs-timeline</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header>
+  <h1>btrfs-timeline</h1>
+  <form id="path-form">
+    <input id="path-input" type="text" spellcheck="false" autocomplete="off">
+    <button type="submit" id="path-go"></button>
+  </form>
+</header>
+
+<main>
+  <section id="browser" aria-labelledby="browser-title">
+    <h2 id="browser-title"></h2>
+    <nav id="breadcrumbs"></nav>
+    <ul id="entries"></ul>
+  </section>
+
+  <section id="timeline" aria-labelledby="timeline-title">
+    <h2 id="timeline-title"></h2>
+    <p id="timeline-target" class="path"></p>
+    <table id="versions">
+      <thead><tr id="versions-head"></tr></thead>
+      <tbody id="versions-body"></tbody>
+    </table>
+    <div id="preview-box" hidden>
+      <h3 id="preview-title"></h3>
+      <p id="preview-note" class="note"></p>
+      <pre id="preview"></pre>
+    </div>
+  </section>
+</main>
+
+<dialog id="restore-dialog">
+  <form method="dialog">
+    <h2 id="restore-title"></h2>
+    <dl id="restore-details"></dl>
+    <label id="in-place-label">
+      <input type="checkbox" id="in-place">
+      <span id="in-place-text"></span>
+    </label>
+    <p id="restore-warning" class="warning" hidden></p>
+    <menu>
+      <button value="cancel" id="restore-cancel"></button>
+      <button value="confirm" id="restore-confirm" class="danger"></button>
+    </menu>
+  </form>
+</dialog>
+
+<p id="status" role="status"></p>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

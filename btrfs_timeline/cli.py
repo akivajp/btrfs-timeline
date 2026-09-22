@@ -26,12 +26,18 @@ import unicodedata
 from typing import Any, Optional
 
 from . import __version__, i18n
+from .core import browse as browse_module
 from .core import history as history_module
 from .core import mounts as mounts_module
 from .core import restore as restore_module
 from .core import snapshots as snapshots_module
 
 _ = i18n.translate
+
+# Web UI の既定値。``web`` パッケージを import せずにヘルプへ出せるよう、ここに置く
+# (bottle が入っていなくても ``--help`` は表示できなければならない)
+DEFAULT_WEB_HOST = '127.0.0.1'
+DEFAULT_WEB_PORT = 8088
 
 # 履歴表の各列の幅 (端末上の表示桁数)。最後の STATE 列は行末なので幅を持たせない
 HISTORY_COLUMNS = ((3, '>'), (20, '<'), (20, '<'), (10, '>'), (7, '>'))
@@ -92,11 +98,15 @@ def _fail(key: str, **params) -> None:
     print(_('error.prefix', message=_(key, **params)), file=sys.stderr)
 
 
-def _version_to_dict(version: history_module.Version, index: int) -> dict:
+def version_to_dict(version: history_module.Version, index: int) -> dict:
     """``Version`` を JSON 化できる辞書にする。
 
     ``index`` は ``history`` が表示する版番号であり、``restore --index`` が
     受け取る値でもある。フロントエンドはこの番号をそのまま復元の指定に使える。
+
+    この関数が公開されているのは、**JSON の形が CLI の公開契約だから**である。
+    スタンドアロン Web UI も同じ形を返さなければ、Cockpit 版と UI コードを
+    共有できなくなる。各フロントエンドで別々に組み立ててはいけない。
     """
     return {
         'index': index,
@@ -110,6 +120,24 @@ def _version_to_dict(version: history_module.Version, index: int) -> dict:
         'first_seen': _isoformat(version.first_seen),
         'last_seen': _isoformat(version.last_seen),
         'snapshot_count': version.snapshot_count,
+    }
+
+
+def snapshot_to_dict(snapshot: snapshots_module.Snapshot) -> dict:
+    """``Snapshot`` を JSON 化できる辞書にする (CLI の公開契約)。"""
+    return {
+        'id': snapshot.id, 'root': snapshot.root,
+        'taken_at': _isoformat(snapshot.taken_at),
+        'description': snapshot.description, 'layout': snapshot.layout,
+    }
+
+
+def entry_to_dict(entry: browse_module.Entry) -> dict:
+    """``Entry`` を JSON 化できる辞書にする (CLI の公開契約)。"""
+    return {
+        'name': entry.name, 'path': entry.path,
+        'is_directory': entry.is_directory, 'is_symlink': entry.is_symlink,
+        'size': entry.size, 'mtime': _isoformat(entry.mtime),
     }
 
 
@@ -137,7 +165,7 @@ def cmd_history(args: argparse.Namespace) -> int:
     if args.json:
         _emit_json({
             'target': target,
-            'versions': [_version_to_dict(v, i) for i, v in numbered],
+            'versions': [version_to_dict(v, i) for i, v in numbered],
         })
         return 0
 
@@ -169,6 +197,10 @@ def cmd_history(args: argparse.Namespace) -> int:
 def _resolve_restore_source(target, args, mount, snapshot_list):
     """復元元のパスと、その版の日時・表示用ラベルを決める。
 
+    選択そのものはコア (``history.select_version`` 等) が行う。Web UI も同じ選択を
+    するため、ロジックをここに置くと二重管理になる。この関数の仕事は
+    「argparse の引数を解釈し、表示用のラベルを付ける」ことだけ。
+
     Returns:
         ``(source, moment, label)``。決められない場合は ``(None, None, 翻訳済みの理由)``。
     """
@@ -176,30 +208,15 @@ def _resolve_restore_source(target, args, mount, snapshot_list):
         snapshot = next((s for s in snapshot_list if s.id == args.snapshot), None)
         if snapshot is None:
             return None, None, _('error.snapshot-not-found', id=args.snapshot)
-        relative = mounts_module.relative_to_mount(target, mount)
-        source = os.path.join(snapshot.root, relative) if relative else snapshot.root
+        source = history_module.path_in_snapshot(snapshot, target, mount=mount)
         return source, snapshot.taken_at, _(
             'restore.label.snapshot', id=snapshot.id, moment=_local(snapshot.taken_at))
 
     versions = history_module.list_versions(target, snapshot_list=snapshot_list, mount=mount)
-    numbered = list(enumerate(versions, start=1))
-
-    if args.index is not None:
-        selected = [(i, v) for i, v in numbered if i == args.index]
-        if not selected:
-            return None, None, _('error.version-not-found', index=args.index)
-        index, version = selected[0]
-        if version.is_live:
-            return None, None, _('error.live-not-restorable')
-        if not version.exists:
-            return None, None, _('error.version-missing', index=index)
-    else:
-        # 既定は「存在する最新のスナップショット版」= 直前の内容。
-        # 履歴を見ずに実行されても、意図と一致する可能性が最も高い選択。
-        candidates = [(i, v) for i, v in numbered if not v.is_live and v.exists]
-        if not candidates:
-            return None, None, _('error.not-in-snapshots')
-        index, version = candidates[-1]
+    try:
+        index, version = history_module.select_version(versions, args.index)
+    except LookupError as error:
+        return None, None, str(error)
 
     return version.path, version.first_seen, _(
         'restore.label.version', index=index, moment=_local(version.first_seen))
@@ -271,10 +288,7 @@ def cmd_snapshots(args: argparse.Namespace) -> int:
         _emit_json({
             'mount_point': mount.mount_point,
             'subvol': mount.subvol,
-            'snapshots': [{
-                'id': s.id, 'root': s.root, 'taken_at': _isoformat(s.taken_at),
-                'description': s.description, 'layout': s.layout,
-            } for s in found],
+            'snapshots': [snapshot_to_dict(s) for s in found],
         })
         return 0
 
@@ -286,6 +300,50 @@ def cmd_snapshots(args: argparse.Namespace) -> int:
             columns=((10, '<'), (20, '<'), (10, '<')),
         ))
     return 0
+
+
+def cmd_browse(args: argparse.Namespace) -> int:
+    """ディレクトリの内容を表示する。
+
+    Web UI がパスを辿るために使う API を、CLI からも同じ形で叩けるようにしてある
+    (Cockpit 版はサーバーを持てないので、この ``--json`` 出力が唯一の経路になる)。
+    """
+    target = os.path.abspath(args.path)
+    try:
+        entries = browse_module.list_directory(target, show_hidden=not args.no_hidden)
+    except OSError as error:
+        print(_('error.prefix', message=error), file=sys.stderr)
+        return 1
+
+    if args.json:
+        _emit_json({
+            'path': target,
+            'parents': browse_module.parents(target),
+            'entries': [entry_to_dict(e) for e in entries],
+        })
+        return 0
+
+    for entry in entries:
+        name = entry.name + ('/' if entry.is_directory else '')
+        print(_row([_human_size(None if entry.is_directory else entry.size),
+                    _local(entry.mtime), name],
+                   columns=((10, '>'), (20, '<'))))
+    return 0
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    """スタンドアロンの Web UI を起動する。
+
+    ``web`` パッケージはここで初めて import する。bottle は任意の依存なので、
+    ``serve`` を使わない限り必要にならないようにしてある。
+    """
+    from .web import server as server_module
+
+    return server_module.serve(
+        host=args.host, port=args.port, root=args.root,
+        read_only=args.read_only, auth=args.auth or os.environ.get('BTRFS_TIMELINE_AUTH'),
+        allow_no_auth=args.allow_no_auth, debug=args.debug,
+    )
 
 
 def cmd_mounts(args: argparse.Namespace) -> int:
@@ -363,6 +421,33 @@ def build_parser() -> argparse.ArgumentParser:
     snapshots_parser.add_argument('--json', action='store_true', help=_('cli.option.json'))
     _add_language_option(snapshots_parser)
     snapshots_parser.set_defaults(func=cmd_snapshots)
+
+    # --- browse
+    browse_parser = subparsers.add_parser('browse', help=_('browse.command'))
+    browse_parser.add_argument('path', nargs='?', default='.',
+                               help=_('browse.argument.path'))
+    browse_parser.add_argument('--no-hidden', action='store_true',
+                               help=_('browse.option.no-hidden'))
+    browse_parser.add_argument('--json', action='store_true', help=_('cli.option.json'))
+    _add_language_option(browse_parser)
+    browse_parser.set_defaults(func=cmd_browse)
+
+    # --- serve
+    serve_parser = subparsers.add_parser('serve', help=_('serve.command'))
+    serve_parser.add_argument('--host', default=DEFAULT_WEB_HOST,
+                              help=_('serve.option.host', default=DEFAULT_WEB_HOST))
+    serve_parser.add_argument('--port', type=int, default=DEFAULT_WEB_PORT,
+                              help=_('serve.option.port', default=DEFAULT_WEB_PORT))
+    serve_parser.add_argument('--root', metavar='PATH', help=_('serve.option.root'))
+    serve_parser.add_argument('--read-only', action='store_true',
+                              help=_('serve.option.read-only'))
+    serve_parser.add_argument('--auth', metavar='USER:PASSWORD',
+                              help=_('serve.option.auth'))
+    serve_parser.add_argument('--allow-no-auth', action='store_true',
+                              help=_('serve.option.allow-no-auth'))
+    serve_parser.add_argument('--debug', action='store_true', help=_('serve.option.debug'))
+    _add_language_option(serve_parser)
+    serve_parser.set_defaults(func=cmd_serve)
 
     # --- mounts
     mounts_parser = subparsers.add_parser('mounts', help=_('mounts.command'))
