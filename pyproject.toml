@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "btrfs-timeline"
+dynamic = ["version"]
+description = "Browse and restore previous versions of your files from btrfs snapshots, from a browser"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Akiva Miura", email = "akiva.miura@gmail.com" }]
+keywords = ["btrfs", "snapshot", "snapper", "backup", "file-history", "web-ui", "self-hosted"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Archiving :: Backup",
+    "Topic :: System :: Filesystems",
+    "Topic :: System :: Systems Administration",
+]
+# コア機能 (CLI) は標準ライブラリだけで動く。Web UI を使うときだけ bottle/Jinja2 が要る
+dependencies = []
+
+[project.optional-dependencies]
+# スタンドアロンの Web UI
+web = [
+    "bottle>=0.12",
+    "Jinja2>=3.0",
+]
+# マルチスレッドの HTTP サーバー (任意)
+server = [
+    "waitress>=3.0",
+]
+dev = [
+    "pytest>=7.0",
+    "bottle>=0.12",
+    "Jinja2>=3.0",
+    "webtest>=3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/akivajp/btrfs-timeline"
+Repository = "https://github.com/akivajp/btrfs-timeline"
+Issues = "https://github.com/akivajp/btrfs-timeline/issues"
+
+[project.scripts]
+btrfs-timeline = "btrfs_timeline.cli:main"
+
+[tool.hatch.version]
+path = "btrfs_timeline/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["btrfs_timeline"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/btrfs_timeline",
+    "/tests",
+    "/README.md",
+    "/README.ja.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
