@@ -5,8 +5,9 @@ Time Machine does it, from a browser.
 
 [日本語版 README はこちら](README.ja.md)
 
-> **Status: early development.** The core and the CLI work and are tested. The web UI
-> and the restore command are being built next. See [Roadmap](#roadmap).
+> **Status: early development.** The core and the CLI work and are tested — browsing
+> history and restoring files are both usable today. The web UI is being built next.
+> See [Roadmap](#roadmap).
 
 ## Why this exists
 
@@ -87,15 +88,51 @@ Example output:
 
 ```
 /home/akiva/.gitconfig
-FIRST SEEN           LAST SEEN                  SIZE  SNAPS  STATE
-2024-10-02 02:00:08  2025-01-01 00:00:00           -      3  (does not exist)
-2025-12-01 00:00:08  2026-03-01 00:00:00       268 B      4  ok
-2026-04-01 00:00:00  2026-09-23 01:00:00       297 B     28  ok
--                    -                         297 B      -  live
+  # FIRST SEEN           LAST SEEN                  SIZE  SNAPS  STATE
+  1 2024-10-02 02:00:08  2025-01-01 00:00:00           -      3  (does not exist)
+  2 2025-12-01 00:00:08  2026-03-01 00:00:00       268 B      4  ok
+  3 2026-04-01 00:00:00  2026-09-23 01:00:00       297 B     28  ok
+  4 -                    -                         297 B      -  live
 ```
 
 Thirty-five snapshots, three meaningful versions, and the gap before the file was
 created — which is the point.
+
+## Restoring
+
+```shell
+# Bring back the newest version found in snapshots, next to the original file
+btrfs-timeline restore ~/notes.md
+
+# Pick a version by the number shown in the "#" column of `history`
+btrfs-timeline restore ~/notes.md --index 2
+
+# Or by snapshot id
+btrfs-timeline restore ~/notes.md --snapshot 10129
+
+# Show what would happen and change nothing
+btrfs-timeline restore ~/notes.md --dry-run
+
+# Write somewhere else, or overwrite the original (a backup is kept)
+btrfs-timeline restore ~/notes.md --to /tmp/notes.old.md
+btrfs-timeline restore ~/notes.md --in-place
+```
+
+Three properties matter here:
+
+- **Nothing is overwritten by default.** The restored file is written next to the
+  original as `notes.20260401T000008.md`. The worst failure mode for a history tool is
+  destroying the current content of a file while trying to get an old one back, so it is
+  excluded by default rather than guarded by a prompt. `--in-place` overwrites, and even
+  then the current content is kept as `notes.before-restore.<timestamp>.md` unless you
+  pass both `--no-backup` and `--force`.
+- **It is a reflink, not a copy.** Restoring uses the `FICLONE` ioctl, so it shares
+  extents with the snapshot: instant regardless of file size, and no extra space used.
+  If the destination is on another filesystem it falls back to a plain copy, and the
+  output says which one happened.
+- **Writes are atomic.** Content goes to a temporary file in the destination directory
+  and is moved into place with `rename(2)`, so an interrupted restore never leaves a
+  half-written file.
 
 ## Supported snapshot layouts
 
@@ -111,6 +148,7 @@ the directory mtime, in that order.
 ## Roadmap
 
 1. **File history browser, standalone web UI** — the current focus
+   (core, CLI and restore are done)
 2. **Cockpit module** — same CLI, shared front-end code, for people who already run Cockpit
 3. **Dashboard and device management** — devices, RAID profile, scrub/balance progress
 4. **Desktop GUI**
@@ -126,6 +164,10 @@ privileges.
   never reports live content as if it were old.
 - Versions are compared by mtime and size, not by content hash. Hashing would mean
   reading every version of every file.
+- Restoring a whole directory is not supported yet — only individual files. Restoring
+  part of a tree silently would be worse than refusing.
+- A restored file keeps the original's permissions and mtime, but not its owner:
+  `chown` requires root, and this tool is meant to run unprivileged.
 - btrfs RAID 5/6 is still not considered production-ready upstream; this tool does not
   change that.
 
