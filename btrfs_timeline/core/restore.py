@@ -30,6 +30,8 @@ import shutil
 import stat
 from typing import NamedTuple, Optional
 
+from .. import i18n
+
 # FICLONE = _IOW(0x94, 9, int)。エクステントを共有する形でファイル全体を複製する。
 # btrfs / XFS (reflink 有効時) などで使える。同一ファイルシステム内であることが条件。
 FICLONE = 0x40049409
@@ -220,28 +222,28 @@ def plan_restore(target: str, source: str,
         ValueError: 復元元と復元先が同じ。
     """
     if not os.path.lexists(source):
-        raise FileNotFoundError('復元元が見つかりません: {0}'.format(source))
+        raise FileNotFoundError(i18n.translate('error.source-missing', path=source))
 
     is_symlink = os.path.islink(source)
     if not is_symlink and os.path.isdir(source):
-        raise IsADirectoryError(
-            'ディレクトリの復元には未対応です (ファイルを指定してください): {0}'.format(source))
+        raise IsADirectoryError(i18n.translate('error.source-is-directory', path=source))
 
     if destination is not None:
         destination = os.path.abspath(destination)
         if os.path.lexists(destination) and not overwrite:
-            raise FileExistsError('復元先が既に存在します: {0}'.format(destination))
+            raise FileExistsError(i18n.translate('error.destination-exists', path=destination))
     elif in_place:
         destination = target
     else:
         destination = sibling_path(target, moment)
 
     if os.path.abspath(source) == destination:
-        raise ValueError('復元元と復元先が同じです: {0}'.format(destination))
+        raise ValueError(i18n.translate('error.same-path', path=destination))
 
     parent = os.path.dirname(destination) or '.'
     if not os.path.isdir(parent):
-        raise FileNotFoundError('復元先のディレクトリがありません: {0}'.format(parent))
+        raise FileNotFoundError(
+            i18n.translate('error.destination-directory-missing', path=parent))
 
     # 退避が要るのは「上書きする」かつ「上書きされる中身が実在する」ときだけ。
     # 退避先の日時は版の日時ではなく現在時刻にする (退避したのは今の内容なので)。

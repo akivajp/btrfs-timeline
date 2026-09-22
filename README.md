@@ -88,11 +88,11 @@ Example output:
 
 ```
 /home/akiva/.gitconfig
-  # FIRST SEEN           LAST SEEN                  SIZE  SNAPS  STATE
-  1 2024-10-02 02:00:08  2025-01-01 00:00:00           -      3  (does not exist)
-  2 2025-12-01 00:00:08  2026-03-01 00:00:00       268 B      4  ok
-  3 2026-04-01 00:00:00  2026-09-23 01:00:00       297 B     28  ok
-  4 -                    -                         297 B      -  live
+  # FIRST SEEN           LAST SEEN                  SIZE   SNAPS STATE
+  1 2024-10-02 02:00:08  2025-01-01 00:00:00           -       3 (does not exist)
+  2 2025-12-01 00:00:08  2026-03-01 00:00:00       268 B       4 ok
+  3 2026-04-01 00:00:00  2026-09-23 01:00:00       297 B      28 ok
+  4 -                    -                         297 B       - live
 ```
 
 Thirty-five snapshots, three meaningful versions, and the gap before the file was
@@ -133,6 +133,43 @@ Three properties matter here:
 - **Writes are atomic.** Content goes to a temporary file in the destination directory
   and is moved into place with `rename(2)`, so an interrupted restore never leaves a
   half-written file.
+
+## Translations
+
+Messages are translated at runtime from JSON catalogs in
+[`btrfs_timeline/locales/`](btrfs_timeline/locales/). `en.json` is the reference, and any
+key a catalog is missing falls back to English — so a partial translation is useful from
+its very first line.
+
+```shell
+btrfs-timeline history ~/notes.md --lang ja   # this invocation only
+BTRFS_TIMELINE_LANG=ja btrfs-timeline ...     # this shell
+```
+
+With neither, the language comes from `LC_ALL`, `LC_MESSAGES` or `LANG`, and falls back
+to English; `LANG=C` means English. Only human-readable output is translated. `--json` is
+byte-identical in every language, because front-ends and scripts consume it.
+
+### Adding a language
+
+Copy `en.json` to `<code>.json` — an ISO 639-1 code such as `de`, or a regional variant
+such as `pt_br`, which falls back to `pt` if that catalog exists — and translate the
+values. **No code changes are needed.** The new language is picked up automatically,
+including in the values `--lang` accepts.
+
+The test suite (`pytest tests/test_i18n.py`) enforces two rules:
+
+- Every key from `en.json` is present, and nothing extra is.
+- Placeholder *names* match (`{path}`, `{index}`). Their order within a sentence is yours
+  to change — that is exactly why they are named rather than positional.
+
+Tables are aligned by terminal display width rather than character count, so East Asian
+full-width characters line up correctly.
+
+Why JSON and not gettext: `.po` files need a compilation step to `.mo`, and the web UI
+and Cockpit module render in the browser, where `.mo` is unusable. A single catalog
+format that both Python and JavaScript can read keeps the translations from being
+maintained twice.
 
 ## Supported snapshot layouts
 

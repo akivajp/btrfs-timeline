@@ -21,3 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are recreated as symlinks rather than dereferenced.
 - Version numbers in `history` output (the `#` column, and `index` in the JSON), which
   `restore --index` accepts.
+- Localized messages, loaded at runtime from JSON catalogs under `btrfs_timeline/locales/`
+  with English as the reference and fallback. English and Japanese ship with the package.
+  The language comes from `--lang`, `BTRFS_TIMELINE_LANG`, or the usual locale variables.
+  Adding a language means adding one JSON file and no code. `--json` output is unaffected.
+- Table columns are aligned by terminal display width, so East Asian full-width
+  characters no longer break the layout.

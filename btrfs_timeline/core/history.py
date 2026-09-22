@@ -16,6 +16,7 @@ import datetime
 import os
 from typing import NamedTuple, Optional
 
+from .. import i18n
 from . import mounts as mounts_module
 from . import snapshots as snapshots_module
 
@@ -96,7 +97,7 @@ def probe_snapshots(target: str, snapshot_list=None, mount=None):
     """各スナップショット内での ``target`` の状態を、古い順に観測して返す。"""
     mount = mount or mounts_module.find_containing_mount(target)
     if mount is None:
-        raise LookupError('btrfs のマウントが見つかりません: {0}'.format(target))
+        raise LookupError(i18n.translate('error.no-btrfs-mount', path=target))
 
     if snapshot_list is None:
         snapshot_list = snapshots_module.discover(mount)
