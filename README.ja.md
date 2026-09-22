@@ -5,8 +5,8 @@ Mac の Time Machine のような感覚で。
 
 [English README is here](README.md)
 
-> **状態: 開発初期。** コアと CLI は動作し、テストも通っています。
-> 履歴の閲覧と復元は既に利用できます。次は Web UI を実装します。
+> **状態: 開発初期。** 履歴の閲覧・版のプレビュー・復元は、CLI からもブラウザからも
+> 利用できます。次は Cockpit モジュールを実装します。
 > [ロードマップ](#ロードマップ)を参照してください。
 
 ## なぜ作るのか
@@ -35,8 +35,10 @@ snapper や btrbk、Timeshift で自動スナップショットを取ってい�
 このプロジェクトは3つの形態での提供を想定しており、それらは1つのものを共有します。
 
 ```
-btrfs_timeline/core/   ライブラリ: スナップショット検出・版の履歴・復元
-btrfs_timeline/cli.py  全サブコマンドに --json を持つ CLI  <- 共有される契約
+btrfs_timeline/core/          ライブラリ: スナップショット検出・版の履歴・復元
+btrfs_timeline/cli.py         全サブコマンドに --json を持つ CLI  <- 共有される契約
+btrfs_timeline/web/static/    画面: index.html + app.js + style.css
+                 transport.js   <- フロントエンドごとに差し替える唯一のファイル
    |- スタンドアロン Web   core を直接 import (同一プロセス)
    |- Cockpit モジュール   cockpit.spawn([... , "--json"], {superuser: "require"})
    `- デスクトップ GUI     core を import、または CLI 呼び出し
@@ -46,6 +48,13 @@ Cockpit モジュールには **サーバーサイドが存在せず**、実体�
 `manifest.json` だけで、ブラウザからプロセスを起動してシステムに触れます。
 そのため、共有できるコアの形は「JSON を吐く CLI」しかありません。
 全サブコマンドが `--json` を持つのはこのためで、その出力は公開 API として扱います。
+
+画面はサーバーではなく**ブラウザ側で組み立てます**。Cockpit モジュールには描画を行う
+サーバーが存在しないため、HTML に埋め込んだものは向こうで再利用できなくなるからです。
+代わりに `app.js` はデータを `transport.js` から import し、フロントエンドごとに
+差し替えるのはその1ファイルだけにしてあります
+(こちらは `fetch('./api/history?…')`、あちらは `cockpit.spawn`)。
+UI の残りの部分も、CLI と同じ JSON カタログから引く翻訳も、そのまま共有できます。
 
 好みではなく実測から決まった判断が2つあります。
 
@@ -82,6 +91,12 @@ btrfs-timeline snapshots ~/
 
 # このシステムの btrfs マウント一覧
 btrfs-timeline mounts
+
+# ディレクトリの内容 (Web UI も同じ API を使っている)
+btrfs-timeline browse ~/Documents --json
+
+# Web UI を開く
+btrfs-timeline serve
 ```
 
 出力例:
@@ -134,6 +149,30 @@ btrfs-timeline restore ~/notes.md --in-place
 - **書き込みは原子的です。** 復元先と同じディレクトリの一時ファイルに書いてから
   `rename(2)` で差し替えるので、途中で中断しても書きかけのファイルは残りません。
 
+## Web UI
+
+```shell
+pipx install 'btrfs-timeline[web]'
+btrfs-timeline serve                       # http://127.0.0.1:8088/
+btrfs-timeline serve --root ~/Documents    # このディレクトリ配下だけを閲覧可能にする
+btrfs-timeline serve --read-only           # 履歴の閲覧のみ。復元は無効
+```
+
+左でファイルシステムを辿り、ファイルをクリックすると右に版の一覧が出ます。
+決める前に各版の中身をプレビューでき、ボタン1つで復元できます。
+復元は必ず先に dry-run を表示し、**どこに何を書くのか**と
+**現在の内容をどこに退避するのか**を見せてから確認を取ります。
+
+既定ではループバックのみで待ち受けます。それ以外のアドレスに対しては
+`--auth USER:PASSWORD` (環境変数 `BTRFS_TIMELINE_AUTH` も可) が無い限り**起動を拒否**します。
+到達できる誰もがファイルを読み、上書きまでできてしまうためです
+(意図的に公開する場合は `--allow-no-auth`)。
+復元は `POST` のみで、`Origin` が別サイトのリクエストは拒否します。
+BASIC 認証だけでは、他サイトがブラウザに代理でリクエストを送らせるのを防げないためです。
+
+サーバーはあなたの権限で動くので、あなたが読めるものしか読めません。
+root は不要です — `btrfs subvolume list` を使わないことの狙いがここにあります。
+
 ## 翻訳
 
 メッセージは [`btrfs_timeline/locales/`](btrfs_timeline/locales/) に置かれた JSON の
@@ -184,9 +223,9 @@ Python と JavaScript の双方から読める形式を1つにしておくこと
 
 ## ロードマップ
 
-1. **ファイル履歴ブラウザ / スタンドアロン Web UI** — 現在の主眼
-   (コア・CLI・復元は実装済み)
-2. **Cockpit モジュール** — 同じ CLI を叩き、フロントエンドのコードを共有
+1. **ファイル履歴ブラウザ / スタンドアロン Web UI** — 実装済み
+2. **Cockpit モジュール** — 現在の主眼。同じ CLI と同じ画面を使い、
+   差し替えるのは `transport.js` だけ
 3. **ダッシュボードとデバイス管理** — デバイス一覧、RAID 構成、scrub/balance の進捗
 4. **デスクトップ GUI**
 

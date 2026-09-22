@@ -27,3 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Adding a language means adding one JSON file and no code. `--json` output is unaffected.
 - Table columns are aligned by terminal display width, so East Asian full-width
   characters no longer break the layout.
+- `btrfs-timeline serve`, a standalone web UI: browse the filesystem, see a file's
+  versions, preview one, and restore it. It listens on loopback by default, refuses any
+  other address without `--auth`, rejects cross-origin restore requests, and can be
+  confined with `--root` or made `--read-only`.
+- `btrfs-timeline browse`, the directory listing the web UI navigates with, with `--json`
+  so the Cockpit module can use the same call.
+- The screen is rendered in the browser and gets its data through `transport.js`, so the
+  Cockpit module can reuse it by replacing that one file.
+
+### Changed
+
+- The `web` extra no longer needs Jinja2: the HTML carries no server-rendered data, which
+  is what lets the Cockpit module serve the same file.

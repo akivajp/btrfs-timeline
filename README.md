@@ -5,8 +5,8 @@ Time Machine does it, from a browser.
 
 [日本語版 README はこちら](README.ja.md)
 
-> **Status: early development.** The core and the CLI work and are tested — browsing
-> history and restoring files are both usable today. The web UI is being built next.
+> **Status: early development.** Browsing history, previewing versions and restoring
+> files all work, from the CLI and from the browser. The Cockpit module is next.
 > See [Roadmap](#roadmap).
 
 ## Why this exists
@@ -35,8 +35,10 @@ That is what this is.
 The project is meant to ship in three forms, and they share one thing:
 
 ```
-btrfs_timeline/core/   Library: snapshot discovery, version history, restore
-btrfs_timeline/cli.py  CLI with --json on every subcommand  <- the shared contract
+btrfs_timeline/core/          Library: snapshot discovery, version history, restore
+btrfs_timeline/cli.py         CLI with --json on every subcommand  <- the shared contract
+btrfs_timeline/web/static/    The screen: index.html + app.js + style.css
+                 transport.js   <- the only file a front-end replaces
    |- standalone web   imports core directly (single process)
    |- Cockpit module   cockpit.spawn([... , "--json"], {superuser: "require"})
    `- desktop GUI      imports core, or calls the CLI
@@ -46,6 +48,12 @@ A Cockpit module has **no server side** — it is static files plus a `manifest.
 it reaches the system by spawning processes from the browser. So the only shape a shared
 core can take is *a CLI that emits JSON*. Every subcommand here has `--json` for that
 reason; treat its output as a public API.
+
+The screen is built in the browser, not on the server. A Cockpit module has no server
+to render with, so anything baked into the HTML could not be reused there. Instead
+`app.js` imports its data from `transport.js`, and that one file is what each front-end
+swaps: `fetch('./api/history?…')` here, `cockpit.spawn` there. The rest of the UI — and
+the translations, which come from the same JSON catalogs the CLI uses — is shared.
 
 Two decisions follow from measurements rather than taste:
 
@@ -82,6 +90,12 @@ btrfs-timeline snapshots ~/
 
 # Which btrfs mounts does this system have?
 btrfs-timeline mounts
+
+# What is in this directory? (the web UI uses the same call)
+btrfs-timeline browse ~/Documents --json
+
+# Open the web UI
+btrfs-timeline serve
 ```
 
 Example output:
@@ -134,6 +148,30 @@ Three properties matter here:
   and is moved into place with `rename(2)`, so an interrupted restore never leaves a
   half-written file.
 
+## Web UI
+
+```shell
+pipx install 'btrfs-timeline[web]'
+btrfs-timeline serve                       # http://127.0.0.1:8088/
+btrfs-timeline serve --root ~/Documents    # only allow reading below this directory
+btrfs-timeline serve --read-only           # history only, no restoring
+```
+
+Walk the filesystem on the left, click a file, and its versions appear on the right.
+Each version can be previewed before you decide, and restored with one button. Restoring
+always shows a dry run of exactly what it will write — and where the current content will
+be kept — before asking you to confirm.
+
+It listens on loopback only by default, and it deliberately refuses to listen on any
+other address without `--auth USER:PASSWORD` (also read from `BTRFS_TIMELINE_AUTH`),
+because anyone who can reach it can read your files and write over them. `--allow-no-auth`
+overrides that if you really mean it. Restoring is a `POST` and is rejected when the
+request carries a foreign `Origin`: basic auth alone would not stop another site from
+making your browser send the request for you.
+
+The server runs as you, so it can only read what you can read. It does not need root —
+that is the point of not using `btrfs subvolume list`.
+
 ## Translations
 
 Messages are translated at runtime from JSON catalogs in
@@ -184,9 +222,9 @@ the directory mtime, in that order.
 
 ## Roadmap
 
-1. **File history browser, standalone web UI** — the current focus
-   (core, CLI and restore are done)
-2. **Cockpit module** — same CLI, shared front-end code, for people who already run Cockpit
+1. **File history browser, standalone web UI** — done
+2. **Cockpit module** — the current focus: same CLI, same screen, only `transport.js`
+   differs, for people who already run Cockpit
 3. **Dashboard and device management** — devices, RAID profile, scrub/balance progress
 4. **Desktop GUI**
 
