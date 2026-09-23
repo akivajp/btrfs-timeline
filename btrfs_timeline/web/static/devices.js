@@ -99,11 +99,21 @@ const deviceRows = (devices) => devices.map((device) => {
     .map(([name, value]) => `${name}=${value}`)
     .join(' ');
 
-  // エラーが記録されているデバイスは目立たせる。0 かどうかだけが重要
+  const temperature = device.temperature === null || device.temperature === undefined
+    ? '-'
+    : `${device.temperature.toFixed(0)} °C`;
+
+  // 壊れかけを探しに来る画面なので、そこが目立たないと意味が無い。
+  // 温度の閾値はデバイス自身の申告 (too_hot) に従い、こちらでは決めない
   return row(
-    [device.devid, device.path || '-', formatSize(device.size), state, errors || '-'],
-    device.missing || device.has_errors ? 'alarm' : '');
+    [device.devid, device.path || '-', (device.model || '-').trim(),
+     formatSize(device.size), temperature, state, errors || '-'],
+    device.missing || device.has_errors || device.too_hot ? 'alarm' : '');
 });
+
+const mountRows = (mounts) => mounts.map((mount) => row([
+  mount.path, mount.subvol || '-', mount.device || '-',
+]));
 
 const allocationRows = (allocations) => allocations.map((allocation) => row([
   allocation.kind,
@@ -116,12 +126,6 @@ const renderFilesystem = (filesystem, scrub) => {
   const section = node('section', 'filesystem');
   section.append(node('h2', null, filesystem.label || filesystem.uuid));
 
-  const summary = node('p', 'note');
-  summary.textContent = t('devices.mounted', {
-    paths: filesystem.mount_points.join(' ') || '-',
-  }).trim();
-  section.append(summary);
-
   const state = node('p', filesystem.degraded ? 'warning' : 'note');
   state.textContent = t('devices.state', {
     state: t(filesystem.degraded ? 'devices.state.degraded' : 'devices.state.ok'),
@@ -129,8 +133,15 @@ const renderFilesystem = (filesystem, scrub) => {
   }).trim();
   section.append(state);
 
+  // どのサブボリュームがどこに出ているか。btrfs では 1 つのファイルシステムが
+  // 複数の場所に現れるので、これが見えないと一覧と実感が結び付かない
   section.append(table(
-    ['devices.column.devid', 'devices.column.device', 'devices.column.size',
+    ['web.column.mounted-at', 'web.column.subvolume', 'web.column.through'],
+    mountRows(filesystem.mounts || [])));
+
+  section.append(table(
+    ['devices.column.devid', 'devices.column.device', 'devices.column.model',
+     'devices.column.size', 'devices.column.temperature',
      'devices.column.state', 'devices.column.errors'],
     deviceRows(filesystem.devices)));
 

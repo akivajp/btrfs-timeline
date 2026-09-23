@@ -82,7 +82,9 @@ const device = (devid, name, overrides) => ({
     write_io_errs: 0, read_io_errs: 0, flush_io_errs: 0,
     corruption_errs: 0, generation_errs: 0,
   },
-  has_errors: false, ...overrides,
+  has_errors: false,
+  model: 'ACME 2TB', temperature: 38, temperature_critical: 85, too_hot: false,
+  ...overrides,
 });
 
 export const fakeDevices = async () => ({
@@ -90,6 +92,10 @@ export const fakeDevices = async () => ({
     uuid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
     label: 'tank',
     mount_points: ['/mnt/tank'],
+    mounts: [
+      { path: '/mnt/tank', subvol: '/@tank', device: '/dev/sdd1' },
+      { path: '/mnt/tank/home', subvol: '/@home', device: '/dev/sdd1' },
+    ],
     degraded: true,
     exclusive_operation: 'none',
     command: {
@@ -104,6 +110,8 @@ export const fakeDevices = async () => ({
       device(3, 'sda1', {
         errors: { corruption_errs: 7 }, has_errors: true,
       }),
+      // 危険域を超えたデバイス。閾値はデバイス自身の申告に従う
+      device(4, 'sdb1', { temperature: 92, temperature_critical: 85, too_hot: true }),
     ],
     allocations: [
       { kind: 'data', profile: 'raid1', total_bytes: 1000, used_bytes: 500 },

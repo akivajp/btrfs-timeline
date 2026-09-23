@@ -279,6 +279,28 @@ def test_dashboard_shows_the_devices(dashboard):
     assert '/dev/sdc1' in dashboard['rendered']
 
 
+def test_the_subvolume_behind_each_mount_is_shown(dashboard):
+    """``/mnt/tank/home`` の正体が ``/@home`` であることが見える。
+
+    btrfs では 1 つのファイルシステムが複数の場所に現れるので、
+    これが無いと一覧とマウント先の関係が掴めない。
+    """
+    assert '/@home' in dashboard['rendered']
+    assert '/mnt/tank/home' in dashboard['rendered']
+
+
+def test_model_and_temperature_are_shown(dashboard):
+    assert 'ACME 2TB' in dashboard['rendered']
+    assert '38 °C' in dashboard['rendered']
+
+
+def test_a_device_over_its_own_limit_is_flagged(dashboard):
+    """閾値はデバイスの申告に従う。こちらで何度から危ないかを決めない。"""
+    assert '92 °C' in dashboard['rendered']
+    # 欠損 1 台 + エラー 1 台 + 高温 1 台
+    assert dashboard['alarmRows'] >= 3
+
+
 def test_a_missing_device_is_not_buried(dashboard):
     """欠損とエラーは目立たせる。
 

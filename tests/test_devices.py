@@ -114,6 +114,41 @@ def test_reports_the_command_it_ran(sysfs, stats):
     assert 'device stats' in found.stats_command.display()
 
 
+def test_mounts_carry_their_subvolume(sysfs, stats):
+    """どのサブボリュームがどこに出ているかを保つ。"""
+    found = devices.discover(_mounts())[0]
+    assert [(m.mount_point, m.subvol) for m in found.mounts] == [('/mnt/tank', '/')]
+
+
+def test_temperature_threshold_comes_from_the_device(sysfs, stats, monkeypatch):
+    """**何度から危ないかを、こちらで決めない。**
+
+    hwmon がメーカーの申告する危険域を持っているので、それを使う。
+    勝手な数字で警告を出すと、外れたときに警告そのものが信用されなくなる。
+    """
+    monkeypatch.setattr(devices, '_disk_info', lambda name: ('ACME', 92.0, 85.0))
+    device = devices.discover(_mounts())[0].devices[0]
+    assert device.model == 'ACME'
+    assert device.temperature == 92.0
+    assert device.temperature_critical == 85.0
+
+
+def test_missing_temperature_is_not_invented(sysfs, stats, monkeypatch):
+    """読めなければ None。0 度と書いてはいけない。"""
+    monkeypatch.setattr(devices, '_disk_info', lambda name: (None, None, None))
+    device = devices.discover(_mounts())[0].devices[0]
+    assert device.temperature is None
+    assert device.temperature_critical is None
+
+
+def test_smart_is_offered_as_a_command_not_run(sysfs, stats):
+    """消耗度や代替セクタは sysfs では読めない。root が要るので、示すに留める。"""
+    operation = devices.smart_operation('/dev/sda')
+    assert operation.argv == ['smartctl', '-H', '-A', '/dev/sda']
+    assert operation.needs_root is True
+    assert operation.risk == operations.SAFE
+
+
 def test_reads_label_and_allocation(sysfs, stats):
     found = devices.discover(_mounts())[0]
     assert found.label == 'tank'

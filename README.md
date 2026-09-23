@@ -340,6 +340,20 @@ becomes dangerous and asks for the name.
 An operation declared dangerous cannot be built without a confirmation token at all —
 forgetting one is a `ValueError`, not a quietly weaker prompt.
 
+Each filesystem shows which subvolume is mounted where — `/home` being `subvol=/@home`
+is the relationship btrfs hides and a flat list of paths does not convey — along with
+every device's model and temperature.
+
+**Temperature comes from hwmon, unprivileged**, which the NVMe driver populates and the
+`drivetemp` module does for SATA. A device is flagged as too hot against **the limit it
+reports itself**, not a number chosen here: a threshold invented by this tool would
+eventually be wrong for somebody's disk, and a warning that is wrong stops being read.
+
+Wear, reallocated sectors and power-on hours are beyond sysfs — that is `smartctl`
+territory, and it needs root. The dashboard offers the command for any device that has
+recorded errors, rather than running it or asking for privileges it otherwise does not
+need.
+
 ## Translations
 
 Messages are translated at runtime from JSON catalogs in

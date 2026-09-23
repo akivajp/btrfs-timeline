@@ -704,6 +704,14 @@ def _device_to_dict(device) -> dict:
         'size': device.size, 'missing': device.missing,
         'writeable': device.writeable, 'replace_target': device.replace_target,
         'errors': device.errors, 'has_errors': device.has_errors,
+        'model': device.model,
+        'temperature': device.temperature,
+        'temperature_critical': device.temperature_critical,
+        # 閾値はデバイス自身の申告で判断する。こちらで何度から危ないかを
+        # 決めてしまうと、外れたときに警告そのものが信用されなくなる
+        'too_hot': (device.temperature is not None
+                    and device.temperature_critical is not None
+                    and device.temperature >= device.temperature_critical),
     }
 
 
@@ -718,6 +726,8 @@ def filesystem_to_dict(filesystem) -> dict:
         'uuid': filesystem.uuid,
         'label': filesystem.label,
         'mount_points': list(filesystem.mount_points),
+        'mounts': [{'path': m.mount_point, 'subvol': m.subvol,
+                    'device': m.device} for m in filesystem.mounts],
         'degraded': filesystem.degraded,
         'exclusive_operation': filesystem.exclusive_operation,
         'command': (filesystem.stats_command.to_dict()
@@ -749,7 +759,9 @@ def cmd_devices(args: argparse.Namespace) -> int:
     for filesystem in found:
         title = filesystem.label or filesystem.uuid
         print(title)
-        print(_('devices.mounted', paths=' '.join(filesystem.mount_points) or '-'))
+        for mount in filesystem.mounts:
+            print(_('devices.mount-line', path=mount.mount_point,
+                    subvol=mount.subvol or '-'))
         print(_('devices.state',
                 state=_('devices.state.degraded' if filesystem.degraded
                         else 'devices.state.ok'),
@@ -761,9 +773,11 @@ def cmd_devices(args: argparse.Namespace) -> int:
                     risk=_risk_label(filesystem.stats_command.risk)))
         print()
         print(_row([_('devices.column.devid'), _('devices.column.device'),
-                    _('devices.column.size'), _('devices.column.state'),
+                    _('devices.column.model'), _('devices.column.size'),
+                    _('devices.column.temperature'), _('devices.column.state'),
                     _('devices.column.errors')],
-                   columns=((5, '>'), (20, '<'), (10, '>'), (10, '<'))))
+                   columns=((5, '>'), (16, '<'), (24, '<'), (10, '>'),
+                            (7, '>'), (10, '<'))))
         for device in filesystem.devices:
             if device.missing:
                 state = _('devices.device.missing')
@@ -776,9 +790,13 @@ def cmd_devices(args: argparse.Namespace) -> int:
             errors = ' '.join(
                 '{0}={1}'.format(name, value)
                 for name, value in device.errors.items() if value) or '-'
-            print(_row([device.devid, device.path or '-', _human_size(device.size),
-                        state, errors],
-                       columns=((5, '>'), (20, '<'), (10, '>'), (10, '<'))))
+            temperature = ('-' if device.temperature is None
+                           else '{0:.0f}C'.format(device.temperature))
+            print(_row([device.devid, device.path or '-',
+                        (device.model or '-').strip(), _human_size(device.size),
+                        temperature, state, errors],
+                       columns=((5, '>'), (16, '<'), (24, '<'), (10, '>'),
+                                (7, '>'), (10, '<'))))
         print()
         print('  ' + _row([_('devices.column.allocation'), _('devices.column.profile'),
                            _('devices.column.total'), _('devices.column.used')],

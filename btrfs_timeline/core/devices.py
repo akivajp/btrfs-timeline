@@ -71,6 +71,20 @@ class Device(NamedTuple):
     errors: dict
     """エラーカウンタ。``{'read_errs': 0, ...}``"""
 
+    model: Optional[str] = None
+    """ディスクの型番。読めなければ None"""
+
+    temperature: Optional[float] = None
+    """温度 (摂氏)。読めなければ None"""
+
+    temperature_critical: Optional[float] = None
+    """メーカーが申告する危険域 (摂氏)。読めなければ None。
+
+    **閾値をこちらで決め打ちしない。** 何度から危ないかはデバイスが知っており、
+    hwmon がそれを教えてくれる。勝手な数字で警告を出すと、外れたときに
+    信用されなくなる。
+    """
+
     @property
     def has_errors(self) -> bool:
         """1 つでもエラーが記録されているか。
@@ -102,7 +116,17 @@ class Filesystem(NamedTuple):
 
     uuid: str
     label: str
+
     mount_points: List[str]
+    """マウント先のパス"""
+
+    mounts: List[mounts_module.MountPoint]
+    """マウントの詳細。**どのサブボリュームがどこに出ているか** が分かる。
+
+    btrfs では 1 つのファイルシステムが複数の場所に現れる。``/home`` の正体が
+    ``subvol=/@home`` であることが見えないと、一覧を見ても関係が掴めない。
+    """
+
     devices: List[Device]
     allocations: List[Allocation]
 
@@ -207,6 +231,7 @@ def _device(base: str, devid: int, stats: dict) -> Device:
     devinfo = os.path.join(base, 'devinfo', str(devid))
     path = stats.get('path') or ''
     name = os.path.basename(path)
+    model, temperature, critical = _disk_info(name) if name else (None, None, None)
     return Device(
         devid=devid,
         name=name,
@@ -217,7 +242,62 @@ def _device(base: str, devid: int, stats: dict) -> Device:
         writeable=_read_int(os.path.join(devinfo, 'writeable')) == 1,
         replace_target=_read_int(os.path.join(devinfo, 'replace_target')) == 1,
         errors=stats.get('errors') or {name: None for name in ERROR_COUNTERS},
+        model=model,
+        temperature=temperature,
+        temperature_critical=critical,
     )
+
+
+def _whole_disk(name: str) -> Optional[str]:
+    """パーティション名から、ディスク本体の sysfs パスを返す。
+
+    ``nvme0n1p1`` → ``.../nvme0n1``、``sda1`` → ``.../sda``。
+    もともとディスク全体なら、そのまま返す。温度や型番はディスク単位の情報で、
+    パーティションの側には無い。
+    """
+    path = os.path.realpath(os.path.join(SYSFS_BLOCK, name))
+    if not os.path.isdir(path):
+        return None
+    # パーティションには partition ファイルがある。あれば 1 つ上がディスク本体
+    if os.path.exists(os.path.join(path, 'partition')):
+        return os.path.dirname(path)
+    return path
+
+
+def _hwmon_value(directory: str, filename: str) -> Optional[float]:
+    """hwmon の温度を摂氏で返す (sysfs はミリ度で持っている)。"""
+    value = _read_int(os.path.join(directory, filename))
+    return None if value is None else value / 1000.0
+
+
+def _disk_info(name: str):
+    """型番と温度を返す。読めない項目は None。
+
+    **どちらも通常のパーミッションで読める。** NVMe なら
+    ``/sys/class/nvme/<controller>/hwmon*/`` に、SATA でも ``drivetemp`` が
+    読み込まれていれば ``device/hwmon*/`` に温度が出る。``smartctl`` は root を
+    要するが、温度と型番のためだけにそれを求める必要は無い。
+    """
+    disk = _whole_disk(name)
+    if not disk:
+        return None, None, None
+
+    device = os.path.join(disk, 'device')
+    model = _read(os.path.join(device, 'model'))
+
+    # hwmon はディスク本体の下か、その device (コントローラ) の下にある
+    for base in (device, disk):
+        try:
+            entries = sorted(e for e in os.listdir(base) if e.startswith('hwmon'))
+        except OSError:
+            continue
+        for entry in entries:
+            directory = os.path.join(base, entry)
+            current = _hwmon_value(directory, 'temp1_input')
+            if current is not None:
+                return (model or None, current,
+                        _hwmon_value(directory, 'temp1_crit'))
+    return model or None, None, None
 
 
 def _device_size(name: str) -> Optional[int]:
@@ -269,6 +349,10 @@ def discover(mount_list=None) -> List[Filesystem]:
         mount_points = sorted(
             mount.mount_point for mount in mount_list
             if os.path.basename(mount.device) in names_in_sysfs)
+        own_mounts = sorted(
+            (mount for mount in mount_list
+             if os.path.basename(mount.device) in names_in_sysfs),
+            key=lambda m: m.mount_point)
         stats, operation = _device_stats(mount_points[0] if mount_points else '')
 
         devices = [_device(base, devid, stats.get(devid, {}))
@@ -290,6 +374,7 @@ def discover(mount_list=None) -> List[Filesystem]:
             uuid=uuid,
             label=_read(os.path.join(base, 'label')) or '',
             mount_points=mount_points,
+            mounts=own_mounts,
             devices=devices,
             allocations=allocations,
             exclusive_operation=_read(os.path.join(base, 'exclusive_operation')),
@@ -384,3 +469,16 @@ def replace_cancel_operation(path: str) -> operations.Operation:
         ['btrfs', 'replace', 'cancel', path],
         risk=operations.CAUTION, needs_root=True,
         summary_key='operation.device-replace-cancel', path=path)
+
+
+def smart_operation(device: str) -> operations.Operation:
+    """``smartctl`` でディスク自身の健康状態を見る。
+
+    温度と型番は sysfs から非特権で読めるが、**残り寿命や代替セクタ数までは
+    読めない**。そこは ``smartctl`` の領分で、こちらは root を要する。
+    このツールは代わりに実行せず、実行すべきコマンドとして示すに留める。
+    """
+    return operations.describe(
+        ['smartctl', '-H', '-A', device],
+        risk=operations.SAFE, needs_root=True,
+        summary_key='operation.smart', device=device)

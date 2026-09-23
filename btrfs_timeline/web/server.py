@@ -305,10 +305,7 @@ def create_app(settings: Settings, credentials: Optional[Credentials] = None):
         return {
             'filesystems': [filesystem_to_dict(f) for f in found],
             # 画面が「これを端末で実行してください」と示すための材料
-            'suggestions': [
-                _suggestion(maintenance_module.scrub_start_operation(mount))
-                for f in found for mount in f.mount_points[:1]
-            ],
+            'suggestions': _suggestions(found),
         }
 
     @app.route('/api/scrub')
@@ -398,6 +395,24 @@ def _pick(versions, index):
     except (TypeError, ValueError):
         raise ValueError(i18n.translate('error.version-not-found', index=index))
     return history_module.select_version(versions, number)
+
+
+def _suggestions(filesystems) -> list:
+    """端末で実行してもらう想定のコマンドを組み立てる。
+
+    ``smartctl`` は **エラーが記録されているデバイスにだけ** 出す。
+    何もかも並べると、本当に見るべきものが埋もれる。
+    """
+    found = []
+    for filesystem in filesystems:
+        for mount in filesystem.mount_points[:1]:
+            found.append(_suggestion(
+                maintenance_module.scrub_start_operation(mount)))
+        for device in filesystem.devices:
+            if device.has_errors and device.path:
+                found.append(_suggestion(
+                    devices_module.smart_operation(device.path)))
+    return found
 
 
 def _suggestion(operation) -> dict:

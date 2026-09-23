@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-09-23
+
+### Added
+
+- **Which subvolume is mounted where.** A btrfs filesystem appears at several paths at
+  once, and a flat list of them does not say that `/home` is `subvol=/@home`. The
+  relationship is now shown, in the terminal and on the dashboard.
+- **Device model and temperature, without root.** Both come from sysfs — hwmon, which the
+  NVMe driver populates and `drivetemp` provides for SATA — so the dashboard can show
+  them while still running as an ordinary user.
+- A device is flagged as too hot against **the limit it reports itself** (`temp1_crit`),
+  never a threshold chosen here. A number invented by this tool would eventually be wrong
+  for somebody's disk, and a warning that is wrong stops being read.
+- `smartctl` is offered as a command for devices that have recorded errors. Wear,
+  reallocated sectors and power-on hours are past what sysfs exposes, and that is the one
+  thing here that genuinely needs root — so it is shown rather than run.
+
 ## [0.6.0] - 2026-09-23
 
 ### Added
@@ -216,6 +233,7 @@ release contains.
 - Terminal tables are padded by display width, so East Asian full-width characters line
   up.
 
+[0.7.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.7.0
 [0.6.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.6.0
 [0.5.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.5.0
 [0.4.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.4.0
