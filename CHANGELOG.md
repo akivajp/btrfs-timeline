@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-09-23
+
+### Added
+
+- **When the per-device breakdown is missing, the dashboard says why — and the reason
+  differs by front-end.** "You lack the privilege" and "this route cannot do it" are
+  different situations for the reader, so they are not given the same sentence.
+  - In Cockpit, restricted access gets a button that asks for elevation. Only then does
+    the call switch from `superuser: "try"` to `"require"`, so Cockpit prompts because
+    someone asked it to, not on page load.
+  - Standalone points at the Cockpit module and says why this server will not do it
+    itself: it runs as you on purpose, and Cockpit already has a proper way to elevate
+    with your own credentials. The commands below remain the answer for a terminal.
+- Transports now name themselves, so the screen can explain a limitation without
+  guessing which one it is running under.
+
 ## [0.8.0] - 2026-09-23
 
 ### Added
@@ -277,6 +293,7 @@ release contains.
 - Terminal tables are padded by display width, so East Asian full-width characters line
   up.
 
+[0.8.1]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.8.1
 [0.8.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.8.0
 [0.7.1]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.7.1
 [0.7.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.7.0

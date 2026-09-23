@@ -156,11 +156,12 @@ def _stage(tmp_path, flavour):
     return tmp_path / 'drive.mjs'
 
 
-def _drive(tmp_path, flavour, script_name='drive.mjs'):
+def _drive(tmp_path, flavour, script_name='drive.mjs', environ=None):
     _stage(tmp_path, flavour)
     script = tmp_path / script_name
     completed = subprocess.run(
-        [NODE, str(script)], capture_output=True, text=True, cwd=str(tmp_path))
+        [NODE, str(script)], capture_output=True, text=True, cwd=str(tmp_path),
+        env={**os.environ, **(environ or {})})
     assert completed.returncode == 0, completed.stderr
     return json.loads(completed.stdout.strip().splitlines()[-1])
 
@@ -361,3 +362,52 @@ def test_both_dashboards_render_the_same(dashboard, dashboard_cockpit):
     assert dashboard_cockpit['rendered'] == dashboard['rendered']
     assert dashboard_cockpit['alarmRows'] == dashboard['alarmRows']
     assert dashboard_cockpit['riskBadges'] == dashboard['riskBadges']
+
+
+# --------------------------------------------------------------------------
+# 権限が足りないときの案内
+# --------------------------------------------------------------------------
+
+@pytest.fixture(scope='module')
+def dashboard_without_usage(tmp_path_factory):
+    """内訳が読めなかった状況 (非特権) の画面。"""
+    return _drive(tmp_path_factory.mktemp('dash-nousage'), 'web',
+                  'drive-devices.mjs', {'NO_USAGE': '1'})
+
+
+@pytest.fixture(scope='module')
+def dashboard_cockpit_without_usage(tmp_path_factory):
+    """同じ状況を Cockpit 版の経路で。"""
+    return _drive(tmp_path_factory.mktemp('dash-nousage-cockpit'), 'cockpit',
+                  'drive-devices.mjs', {'NO_USAGE': '1'})
+
+
+def test_no_hint_when_the_breakdown_is_there(dashboard):
+    """読めているときに「root が要ります」と言わない。"""
+    assert 'cockpit install' not in dashboard['rendered']
+    assert 'administrative access' not in dashboard['rendered']
+
+
+def test_standalone_points_at_cockpit(dashboard_without_usage):
+    """**この経路では無理**であることと、どこへ行けばよいかを伝える。"""
+    rendered = dashboard_without_usage['rendered']
+    assert 'cockpit install' in rendered
+    # 昇格の手段を持たないので、押せるボタンは出さない
+    assert 'Show it with administrative access' not in rendered
+
+
+def test_cockpit_offers_to_elevate(dashboard_cockpit_without_usage):
+    """**権限が足りないだけ**なので、その場で頼める。"""
+    rendered = dashboard_cockpit_without_usage['rendered']
+    assert 'administrative access' in rendered
+    # その場で頼めるので、ボタンを出す
+    assert 'Show it with administrative access' in rendered
+    # 「別のものを入れてください」とは言わない。権限が足りないだけ
+    assert 'cockpit install' not in rendered
+
+
+def test_the_rest_of_the_screen_still_works_without_root(dashboard_without_usage):
+    """内訳が読めなくても、デバイスも温度も出る。"""
+    assert dashboard_without_usage['failures'] == []
+    assert '/dev/sdd1' in dashboard_without_usage['rendered']
+    assert '38 °C' in dashboard_without_usage['rendered']

@@ -84,11 +84,14 @@ const device = (devid, name, overrides) => ({
   },
   has_errors: false,
   model: 'ACME 2TB', temperature: 38, temperature_critical: 85, too_hot: false,
-  // root で読めたときの内訳。読めなければ null になる
-  usage: {
-    devid, size: 1024 ** 4, slack: 0, unallocated: 512 * 1024 ** 3,
-    allocations: { 'Data,RAID1': 256 * 1024 ** 3, 'Metadata,RAID1': 8 * 1024 ** 3 },
-  },
+  // root で読めたときの内訳。読めなければ allocations が空になる。
+  // NO_USAGE を立てると、権限が足りない状況を再現する
+  usage: process.env.NO_USAGE
+    ? { devid, size: 1024 ** 4, slack: 0, unallocated: null, allocations: {} }
+    : {
+      devid, size: 1024 ** 4, slack: 0, unallocated: 512 * 1024 ** 3,
+      allocations: { 'Data,RAID1': 256 * 1024 ** 3, 'Metadata,RAID1': 8 * 1024 ** 3 },
+    },
   ...overrides,
 });
 

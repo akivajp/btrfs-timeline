@@ -282,3 +282,7 @@ tr.alarm td { color: var(--danger); }
 .risk-safe { color: var(--muted); }
 .risk-caution { color: var(--accent); border-color: var(--accent); }
 .risk-dangerous { color: var(--danger); border-color: var(--danger); font-weight: 600; }
+
+/* 権限の案内。警告ではないので、目立たせすぎない */
+.filesystem.hint { border-style: dashed; }
+.filesystem.hint .note { max-width: 46rem; }

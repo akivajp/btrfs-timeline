@@ -21,6 +21,12 @@
 
 import { COMMAND } from './command.js';
 
+// どちらの経路で動いているか。画面はこれを見て、できないことの理由を説明する。
+export const FLAVOUR = 'cockpit';
+
+// Cockpit には利用者自身の資格で昇格する仕組みがあるので、頼むことができる。
+export const canElevate = true;
+
 // cockpit.js は素のスクリプトで window.cockpit を定義する (ES モジュールではない)。
 // index.html に script タグを足せば済むが、それをすると HTML が
 // スタンドアロン版と別物になってしまうので、ここで読み込む。
@@ -65,10 +71,15 @@ export const fetchBrowse = (path, snapshot, showHidden) => run([
 
 export const fetchHistory = (path) => run(['history', path]);
 
-export const fetchDevices = async () => {
-  // 割り当ての内訳は root でしか読めない。管理アクセスがあるときだけ得られ、
-  // 無ければ内訳が落ちるだけで残りは変わらない
-  const payload = await run(['devices', '--usage'], { superuser: 'try' });
+export const fetchDevices = async (elevate) => {
+  // 割り当ての内訳は root でしか読めない。
+  //
+  // 既定は 'try' — 管理アクセスが既に有効なら内訳が得られ、そうでなければ
+  // 内訳が落ちるだけで残りは変わらない。**黙って昇格を求めない。**
+  // 'require' は、利用者が画面から明示的に頼んだときだけ使う。そのとき初めて
+  // Cockpit が昇格を尋ねる。
+  const payload = await run(['devices', '--usage'],
+                            { superuser: elevate ? 'require' : 'try' });
   // HTTP 版は「端末で実行すべきコマンド」も返す。Cockpit 版では
   // CLI がそこまで面倒を見ないので、画面が同じ形を受け取れるよう補う。
   return { ...payload, suggestions: payload.suggestions || [] };

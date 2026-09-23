@@ -8,7 +8,9 @@
 // サーバーは利用者の権限で動くので、ここから実行しても失敗するだけであり、
 // 失敗するボタンは無いほうがよい。
 
-import { fetchConfig, fetchDevices, fetchScrub } from './transport.js';
+import {
+  FLAVOUR, canElevate, fetchConfig, fetchDevices, fetchScrub,
+} from './transport.js';
 import { translate } from './i18n.js';
 
 let catalog = {};
@@ -225,9 +227,31 @@ const renderLanguageOptions = () => {
   select.value = config.language;
 };
 
-const load = async () => {
+// 内訳が出せない理由は経路によって違う。「権限が足りない」と「この経路では無理」は
+// 利用者にとって別の話なので、同じ文言で済ませない。
+const renderElevationHint = (dashboard, elevated) => {
+  const section = node('section', 'filesystem hint');
+  section.append(node('h2', null, t('web.elevate.title')));
+  section.append(node('p', 'note', t(
+    FLAVOUR === 'cockpit' ? 'web.elevate.cockpit' : 'web.elevate.standalone')));
+
+  if (canElevate && !elevated) {
+    const button = node('button', null, t('web.elevate.action'));
+    button.type = 'button';
+    // ここで初めて Cockpit が昇格を尋ねる。黙って求めることはしない
+    button.addEventListener('click', () => load(true));
+    section.append(button);
+  }
+  dashboard.append(section);
+};
+
+const hasBreakdown = (filesystems) => filesystems.some(
+  (filesystem) => filesystem.devices.some(
+    (device) => device.usage && Object.keys(device.usage.allocations || {}).length));
+
+const load = async (elevate) => {
   setStatus(t('web.loading'));
-  const data = await fetchDevices();
+  const data = await fetchDevices(elevate);
   const dashboard = el('dashboard');
   dashboard.replaceChildren();
 
@@ -243,6 +267,10 @@ const load = async () => {
       }
     }
     dashboard.append(renderFilesystem(filesystem, scrub));
+  }
+
+  if (!hasBreakdown(data.filesystems)) {
+    renderElevationHint(dashboard, Boolean(elevate));
   }
 
   if ((data.suggestions || []).length) {

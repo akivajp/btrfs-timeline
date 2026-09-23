@@ -3,6 +3,11 @@
 // 本物は fetch で ``/api/...`` を叩く。ここではデータを直接返すだけで、
 // app.js から見える関数の形は同じにしてある。
 
+// スタンドアロン版を名乗る。Cockpit 版のテストでは本物の transport を使うので、
+// こちらは常に standalone。
+export const FLAVOUR = 'standalone';
+export const canElevate = false;
+
 export {
   fakeConfig as fetchConfig,
   fakeBrowse as fetchBrowse,

@@ -28,6 +28,14 @@ const query = (path, extra) => {
 };
 
 // lang を渡すと、その言語のカタログが返る (画面はこれで表示言語を切り替える)。
+// どちらの経路で動いているか。画面はこれを見て、できないことの理由を説明する。
+// 「権限が足りない」と「この経路では無理」は、利用者にとって別の話である。
+export const FLAVOUR = 'standalone';
+
+// スタンドアロンのサーバーは利用者の権限で動くので、昇格の手段を持たない。
+// 引数は受けるが何もしない (画面が経路ごとに分岐せずに済むように)。
+export const canElevate = false;
+
 export const fetchConfig = (lang) =>
   request(`./api/config${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`);
 
@@ -40,7 +48,7 @@ export const fetchBrowse = (path, snapshot, showHidden) =>
 
 export const fetchHistory = (path) => request(`./api/history?${query(path)}`);
 
-export const fetchDevices = () => request('./api/devices');
+export const fetchDevices = (_elevate) => request('./api/devices');
 
 export const fetchScrub = (path) => request(`./api/scrub?${query(path)}`);
 
