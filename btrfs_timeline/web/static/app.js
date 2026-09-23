@@ -294,8 +294,8 @@ const loadHistory = async (path, isDirectory) => {
 const openFile = async (path) => {
   await loadHistory(path, false);
   // 選択状態を反映するため一覧を描き直す (時点は変えない)
-  const listing = await run(() => listing(directory, moment ? moment.id : null));
-  if (listing) renderEntries(listing.entries);
+  const data = await run(() => listing(directory, moment ? moment.id : null));
+  if (data) renderEntries(data.entries);
 };
 
 // ---------------------------------------------------------------------------

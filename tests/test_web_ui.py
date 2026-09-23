@@ -18,10 +18,12 @@ import subprocess
 
 import pytest
 
+from btrfs_timeline import i18n
 from btrfs_timeline.web import server as server_module
 
 NODE = shutil.which('node')
 STATIC = server_module.STATIC_DIRECTORY
+FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'js')
 
 pytestmark = pytest.mark.skipif(NODE is None, reason='node が無いので飛ばします')
 
@@ -37,7 +39,11 @@ def as_module(tmp_path, name: str):
     source = os.path.join(STATIC, name)
     target = tmp_path / (os.path.splitext(name)[0] + '.mjs')
     with open(source, encoding='utf-8') as handle:
-        target.write_text(handle.read(), encoding='utf-8')
+        text = handle.read()
+    # 拡張子を変えた以上、モジュール間の参照も合わせる必要がある
+    for module in ('transport', 'i18n'):
+        text = text.replace("'./{0}.js'".format(module), "'./{0}.mjs'".format(module))
+    target.write_text(text, encoding='utf-8')
     return target
 
 
@@ -105,3 +111,74 @@ def test_every_ui_module_parses(tmp_path):
     """
     for name in ('app.js', 'transport.js', 'i18n.js'):
         subprocess.run([NODE, '--check', str(as_module(tmp_path, name))], check=True)
+
+
+# --------------------------------------------------------------------------
+# 画面を実際に動かす
+# --------------------------------------------------------------------------
+
+def _stage(tmp_path):
+    """本物の画面コードと、テスト用の transport を同じ場所に並べる。
+
+    ``transport.js`` だけを差し替えれば画面が動く、という設計がそのまま効いている
+    (Cockpit 版が差し替えるのと同じ場所を、テストが差し替えているだけ)。
+    """
+    for name in ('app.js', 'i18n.js'):
+        as_module(tmp_path, name)
+    for name in ('transport.mjs', 'drive.mjs'):
+        with open(os.path.join(FIXTURES, name), encoding='utf-8') as handle:
+            (tmp_path / name).write_text(handle.read(), encoding='utf-8')
+    # 本物のカタログを使う。訳文の引き方まで含めて確かめたいので、作り物にしない
+    catalogs = {code: i18n.load_catalog(code) for code in i18n.available_languages()}
+    (tmp_path / 'fixture.mjs').write_text(
+        'export const catalogs = {0};\n'.format(json.dumps(catalogs, ensure_ascii=False)),
+        encoding='utf-8')
+    return tmp_path / 'drive.mjs'
+
+
+@pytest.fixture(scope='module')
+def driven(tmp_path_factory):
+    """画面をひととおり操作した結果を返す (重いので 1 回だけ実行する)。"""
+    tmp_path = tmp_path_factory.mktemp('ui')
+    script = _stage(tmp_path)
+    completed = subprocess.run(
+        [NODE, str(script)], capture_output=True, text=True, cwd=str(tmp_path))
+    assert completed.returncode == 0, completed.stderr
+    return json.loads(completed.stdout.strip().splitlines()[-1])
+
+
+def test_no_step_reports_an_error(driven):
+    """どの操作でもエラー行が出ない。
+
+    app.js の例外は全て run() が status 行に落とすので、ここを見れば
+    未定義の参照・変数名の衝突・API の呼び違いはまとめて捕まる。
+    """
+    assert driven['failures'] == []
+
+
+def test_every_step_ran(driven):
+    """途中で止まらず、想定した操作を最後まで行えている。"""
+    performed = [step['step'] for step in driven['steps']]
+    assert performed == [
+        '起動', 'ファイルを選ぶ', 'プレビュー', '差分に切り替え',
+        '言語を切り替え', '隠しファイルを表示', 'ディレクトリへ移動',
+        '過去の時点を開く', '現在に戻る',
+    ]
+
+
+def test_the_screen_actually_rendered(driven):
+    """描画そのものが行われている (エラーが無いだけでは足りない)。"""
+    assert driven['entries'] > 0
+    assert driven['versions'] > 0
+    assert driven['preview']
+
+
+def test_empty_header_stays_empty_on_screen(driven):
+    """操作列の見出しは空のまま (キー名が出ない)。"""
+    assert driven['actionsHeader'] == ''
+
+
+def test_switching_language_reaches_the_labels(driven):
+    """言語を切り替えると、画面のラベルまで差し替わる。"""
+    assert driven['language'] == 'ja'
+    assert driven['hiddenLabel'] == '隠しファイルを表示'

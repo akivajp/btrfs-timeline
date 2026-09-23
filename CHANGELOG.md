@@ -67,6 +67,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Static assets are served with `Cache-Control: no-cache`, so a browser revalidates them
   instead of pairing a freshly fetched page with a stale `app.js`. Revalidation still
   answers 304 when nothing changed.
+- Selecting a file in the web UI failed with "Cannot access 'listing' before
+  initialization": a local variable shadowed the helper it was assigned from.
 - The browser-side translation lookup moved to `static/i18n.js`, which can be imported
   without touching the DOM, and is now covered by tests that run under Node when it is
   available — including a check that it agrees with the Python implementation.
+- The web UI is now driven end to end under Node against a stubbed transport, with a
+  stubbed DOM, so a mistake that only shows up when the page is used fails the suite
+  instead of the screen. Skipped where Node is absent.
