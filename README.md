@@ -9,10 +9,10 @@ Time Machine does it, from a browser.
 > files all work — from the CLI, from a standalone web UI, and as a Cockpit module.
 > See [Roadmap](#roadmap).
 
-![The web UI: a file browser on the left, and on the right the versions of the selected file, each with a preview and a restore button](https://raw.githubusercontent.com/akivajp/btrfs-timeline/main/docs/screenshot-en.png)
+![The web UI: a file browser on the left, and on the right the versions of the selected file, each with a preview and a restore button](https://raw.githubusercontent.com/akivajp/btrfs-timeline/main/docs/screenshots/screenshot-history-en.png)
 
-One file, four rows: a stretch when it did not exist yet, two contents it has held since,
-and the file as it stands now. Forty-eight snapshots went into that — the ones that
+One file, five rows: a stretch when it did not exist yet, three contents it has held
+since, and the file as it stands now. Fifty-six snapshots went into that — the ones that
 changed nothing are not worth a row.
 
 ## Why this exists
@@ -249,6 +249,8 @@ btrfs-timeline devices --json
 What each filesystem is made of, which profile every kind of allocation uses, whether a
 device is missing, whether something is running, and the per-device error counters — the
 numbers that tell you a disk, a cable or a power supply is on its way out.
+
+![The dashboard: which subvolume is mounted where, the devices with model and temperature, allocation by profile, and the command that was run to read it](https://raw.githubusercontent.com/akivajp/btrfs-timeline/main/docs/screenshots/screenshot-devices-en.png)
 
 **This does not need root.** It deliberately avoids `btrfs filesystem show`, which does:
 that command opens the raw block devices and fails with `Permission denied` for anyone

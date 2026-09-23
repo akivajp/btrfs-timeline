@@ -9,10 +9,10 @@ Mac の Time Machine のような感覚で。
 > スタンドアロンの Web UI からも、Cockpit モジュールとしても利用できます。
 > [ロードマップ](#ロードマップ)を参照してください。
 
-![Web UI。左がファイル一覧、右が選択したファイルの版の一覧で、各版にプレビューと復元のボタンが並んでいる](https://raw.githubusercontent.com/akivajp/btrfs-timeline/main/docs/screenshot-ja.png)
+![Web UI。左がファイル一覧、右が選択したファイルの版の一覧で、各版にプレビューと復元のボタンが並んでいる](https://raw.githubusercontent.com/akivajp/btrfs-timeline/main/docs/screenshots/screenshot-history-ja.png)
 
-1つのファイルに4行。まだ存在していなかった期間、それ以降に取った2つの内容、
-そして現在のファイルです。元になったスナップショットは48個ありますが、
+1つのファイルに5行。まだ存在していなかった期間、それ以降に取った3つの内容、
+そして現在のファイルです。元になったスナップショットは56個ありますが、
 何も変わっていない分は行にする価値がありません。
 
 ## なぜ作るのか
@@ -252,6 +252,8 @@ btrfs-timeline devices --json
 RAID プロファイル、デバイスの欠損の有無、実行中の操作、そしてデバイス毎の
 エラーカウンタを表示します。最後のものは、ディスク・ケーブル・電源のいずれかが
 弱っていることを教えてくれる数字です。
+
+![ダッシュボード。どのサブボリュームがどこにマウントされているか、型番と温度つきのデバイス一覧、割り当てごとのプロファイル、そしてそれを読むために実行したコマンド](https://raw.githubusercontent.com/akivajp/btrfs-timeline/main/docs/screenshots/screenshot-devices-ja.png)
 
 **root は不要です。** `btrfs filesystem show` は意図的に使っていません
 (あれは生のブロックデバイスを開くため、非特権では `Permission denied` になります)。
