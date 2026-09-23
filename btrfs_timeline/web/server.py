@@ -20,9 +20,13 @@ import os
 from typing import Optional
 
 from .. import i18n
-from ..cli import config_payload, entry_to_dict, snapshot_to_dict, version_to_dict
+from ..cli import (config_payload, entry_to_dict, filesystem_to_dict,
+                   scrub_to_dict, snapshot_to_dict, version_to_dict)
 from ..core import browse as browse_module
+from ..core import devices as devices_module
 from ..core import diff as diff_module
+from ..core import maintenance as maintenance_module
+from ..core import operations as operations_module
 from ..core import history as history_module
 from ..core import mounts as mounts_module
 from ..core import restore as restore_module
@@ -124,7 +128,8 @@ def create_app(settings: Settings, credentials: Optional[Credentials] = None):
     # index.html は ``./app.js`` のように相対パスで参照する。Cockpit モジュールでは
     # 同じディレクトリに並ぶので、そちらでも同じ HTML がそのまま動く。
     # そのためルート直下でも配信する必要がある。
-    for name in ('app.js', 'transport.js', 'i18n.js', 'style.css'):
+    for name in ('app.js', 'devices.js', 'transport.js', 'i18n.js',
+                 'style.css', 'devices.html'):
         app.route('/' + name, callback=(lambda target=name: asset(target)))
 
     @app.route('/static/<path:path>')
@@ -287,6 +292,44 @@ def create_app(settings: Settings, credentials: Optional[Credentials] = None):
             'truncated': result.truncated,
         }
 
+    @app.route('/api/devices')
+    def api_devices():
+        """ファイルシステムとデバイスの状態。
+
+        **読むだけである。** scrub や balance の開始は root を要するが、この
+        サーバーは利用者の権限で動くので、ここから実行できるようにはしない。
+        代わりに「端末で実行すべきコマンド」をその危険度とともに返す。
+        押しても必ず失敗するボタンを置くより、そのほうが役に立つ。
+        """
+        found = devices_module.discover()
+        return {
+            'filesystems': [filesystem_to_dict(f) for f in found],
+            # 画面が「これを端末で実行してください」と示すための材料
+            'suggestions': [
+                _suggestion(maintenance_module.scrub_start_operation(mount))
+                for f in found for mount in f.mount_points[:1]
+            ],
+        }
+
+    @app.route('/api/scrub')
+    def api_scrub():
+        """scrub の状態。これだけは非特権で読めるので、画面に出せる。"""
+        path = bottle.request.query.get('path') or ''
+        if not path:
+            return fail(400, i18n.translate('error.path-required'))
+        operation = maintenance_module.scrub_status_operation(path)
+        try:
+            result = operations_module.run(operation, timeout=10)
+        except OSError as error:
+            return fail(500, error)
+        payload = scrub_to_dict(maintenance_module.parse_scrub_status(result.stdout))
+        payload['path'] = path
+        payload['command'] = operation.to_dict()
+        payload['ok'] = result.ok
+        if not result.ok:
+            payload['error'] = result.stderr.strip()
+        return payload
+
     @app.route('/api/restore', method='POST')
     def api_restore():
         """過去の版を復元する。
@@ -355,6 +398,16 @@ def _pick(versions, index):
     except (TypeError, ValueError):
         raise ValueError(i18n.translate('error.version-not-found', index=index))
     return history_module.select_version(versions, number)
+
+
+def _suggestion(operation) -> dict:
+    """端末で実行してもらう想定のコマンド。
+
+    root が要るものは ``sudo`` を付けた形で見せる。**この画面からは実行しない** —
+    表示と実行が同じ文字列であるという約束を、ここでも崩さない。
+    """
+    shown = operation.with_sudo() if operation.needs_root else operation
+    return shown.to_dict()
 
 
 def _pick_any(versions, index, default_live: bool = False):

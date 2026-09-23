@@ -7,9 +7,11 @@
 
 import {
   fakeConfig, fakeBrowse, fakeHistory, fakePreview, fakeDiff, fakeRestore,
+  fakeDevices, fakeScrub,
 } from './fake-data.mjs';
 
-const SUBCOMMANDS = ['config', 'browse', 'history', 'preview', 'diff', 'restore'];
+const SUBCOMMANDS = ['config', 'browse', 'history', 'preview', 'diff', 'restore',
+                     'devices', 'scrub'];
 
 const spawn = async (argv) => {
   const start = argv.findIndex((item) => SUBCOMMANDS.includes(item));
@@ -29,6 +31,11 @@ const spawn = async (argv) => {
   const [subcommand, path] = args;
 
   switch (subcommand) {
+    case 'devices':
+      return JSON.stringify(await fakeDevices());
+    case 'scrub':
+      // `scrub status <path>` — 状態を読むだけ
+      return JSON.stringify(await fakeScrub(args[2]));
     case 'config':
       return JSON.stringify(await fakeConfig(value('--lang')));
     case 'browse':

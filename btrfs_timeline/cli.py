@@ -604,7 +604,7 @@ def _read_status(operation, args, parse, to_dict) -> int:
     return 0
 
 
-def _scrub_to_dict(status) -> dict:
+def scrub_to_dict(status) -> dict:
     return {
         'state': status.state, 'running': status.running,
         'total_bytes': status.total_bytes, 'scrubbed_bytes': status.scrubbed_bytes,
@@ -629,7 +629,7 @@ def cmd_scrub(args: argparse.Namespace) -> int:
     path = os.path.abspath(args.path)
     if args.action == 'status':
         return _read_status(maintenance_module.scrub_status_operation(path), args,
-                            maintenance_module.parse_scrub_status, _scrub_to_dict)
+                            maintenance_module.parse_scrub_status, scrub_to_dict)
 
     builder = {
         'start': lambda: maintenance_module.scrub_start_operation(

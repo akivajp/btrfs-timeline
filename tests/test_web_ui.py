@@ -131,10 +131,10 @@ def _stage(tmp_path, flavour):
     両方で使う。**差し替えるのは transport だけ** という設計がそのまま効いており、
     テストは Cockpit 版が差し替えるのと同じ場所を差し替えているに過ぎない。
     """
-    for name in ('app.js', 'i18n.js'):
+    for name in ('app.js', 'devices.js', 'i18n.js'):
         as_module(tmp_path, name)
-    _copy(os.path.join(FIXTURES, 'drive.mjs'), tmp_path / 'drive.mjs')
-    _copy(os.path.join(FIXTURES, 'fake-data.mjs'), tmp_path / 'fake-data.mjs')
+    for name in ('drive.mjs', 'drive-devices.mjs', 'dom.mjs', 'fake-data.mjs'):
+        _copy(os.path.join(FIXTURES, name), tmp_path / name)
 
     if flavour == 'cockpit':
         # Cockpit 版の transport は本物をそのまま使う (スタブは cockpit.spawn の側)
@@ -156,8 +156,9 @@ def _stage(tmp_path, flavour):
     return tmp_path / 'drive.mjs'
 
 
-def _drive(tmp_path, flavour):
-    script = _stage(tmp_path, flavour)
+def _drive(tmp_path, flavour, script_name='drive.mjs'):
+    _stage(tmp_path, flavour)
+    script = tmp_path / script_name
     completed = subprocess.run(
         [NODE, str(script)], capture_output=True, text=True, cwd=str(tmp_path))
     assert completed.returncode == 0, completed.stderr
@@ -249,3 +250,63 @@ def test_cockpit_module_parses(tmp_path):
     with open(os.path.join(COCKPIT, 'transport.js'), encoding='utf-8') as handle:
         target.write_text(handle.read(), encoding='utf-8')
     subprocess.run([NODE, '--check', str(target)], check=True)
+
+
+# --------------------------------------------------------------------------
+# ダッシュボードの画面
+# --------------------------------------------------------------------------
+
+@pytest.fixture(scope='module')
+def dashboard(tmp_path_factory):
+    """ダッシュボードを描かせた結果 (スタンドアロン版)。"""
+    return _drive(tmp_path_factory.mktemp('dash-web'), 'web', 'drive-devices.mjs')
+
+
+@pytest.fixture(scope='module')
+def dashboard_cockpit(tmp_path_factory):
+    """同じ画面を、Cockpit 版の transport 経由で描かせた結果。"""
+    return _drive(tmp_path_factory.mktemp('dash-cockpit'), 'cockpit',
+                  'drive-devices.mjs')
+
+
+def test_dashboard_renders_without_errors(dashboard):
+    assert dashboard['failures'] == []
+    assert dashboard['sections'] > 0
+
+
+def test_dashboard_shows_the_devices(dashboard):
+    assert '/dev/sdd1' in dashboard['rendered']
+    assert '/dev/sdc1' in dashboard['rendered']
+
+
+def test_a_missing_device_is_not_buried(dashboard):
+    """欠損とエラーは目立たせる。
+
+    このダッシュボードを見る理由はだいたい「どれが壊れかけているか」なので、
+    そこが静かに埋もれたら画面の意味が無い。
+    """
+    assert dashboard['alarmRows'] >= 2
+    assert 'corruption_errs=7' in dashboard['rendered']
+
+
+def test_commands_are_shown_with_their_risk(dashboard):
+    """裏で実行したコマンドも、端末で実行してもらうコマンドも、危険度つきで出す。"""
+    assert dashboard['riskBadges'] >= 2
+    assert 'btrfs --format json device stats' in dashboard['rendered']
+    assert 'sudo btrfs scrub start' in dashboard['rendered']
+
+
+def test_scrub_state_is_shown(dashboard):
+    assert 'running' in dashboard['rendered']
+
+
+def test_the_dashboard_works_through_cockpit_too(dashboard_cockpit):
+    """こちらも transport を差し替えただけで動く。"""
+    assert dashboard_cockpit['failures'] == []
+    assert dashboard_cockpit['sections'] > 0
+
+
+def test_both_dashboards_render_the_same(dashboard, dashboard_cockpit):
+    assert dashboard_cockpit['rendered'] == dashboard['rendered']
+    assert dashboard_cockpit['alarmRows'] == dashboard['alarmRows']
+    assert dashboard_cockpit['riskBadges'] == dashboard['riskBadges']

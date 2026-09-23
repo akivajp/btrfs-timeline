@@ -156,6 +156,7 @@
   "operation.balance-pause": "pause the balance of {path} so it can be resumed later",
   "operation.balance-resume": "carry on the balance of {path} from where it stopped",
 
+  "cockpit.menu-label-devices": "Btrfs devices",
   "cockpit.command": "install the Cockpit module, or remove it",
   "cockpit.argument.action": "install, uninstall, or path to print where it would go",
   "cockpit.option.system": "install for every user under /usr/share/cockpit (needs root)",
@@ -212,5 +213,12 @@
   "web.diff.binary": "One of the versions is binary, so there is nothing to show.",
   "web.diff.truncated": "The diff was cut short.",
   "web.directory.hint": "This is a directory. Pick a version to see what it held at that time.",
+  "web.page.history": "History",
+  "web.page.devices": "Devices",
+  "web.scrub.title": "Scrub",
+  "web.scrub.state": "state: {state} / errors: {errors}",
+  "web.command.read": "What was run to read this",
+  "web.command.suggested": "Commands you may want to run",
+  "web.command.why": "These need root, and this server runs as you — so it will not run them. Run them in a terminal.",
   "web.read-only": "Read-only: restoring is disabled on this server."
 }

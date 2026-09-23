@@ -8,6 +8,11 @@
       "label": "File history",
       "path": "index.html",
       "order": 20
+    },
+    "devices": {
+      "label": "Btrfs devices",
+      "path": "devices.html",
+      "order": 21
     }
   }
 }

@@ -302,6 +302,17 @@ different command than the one that executes.
 `scrub status` is the one thing here that works unprivileged, because it reads the record
 kept under `/var/lib/btrfs/`. `balance status` needs root like the rest.
 
+### In the browser
+
+`btrfs-timeline serve` has a second page for this, linked from the history screen.
+It shows the same information, marks devices with errors or missing devices so they are
+not buried, and reports the scrub state.
+
+**It is read-only, deliberately.** Scrub and balance need root, and this server runs as
+you; a button that always fails is worse than no button. Instead the page prints the
+command to run in a terminal, `sudo` prefix and risk included, exactly as the CLI would.
+Privileged actions belong in the Cockpit module, which has a channel for them.
+
 ## Translations
 
 Messages are translated at runtime from JSON catalogs in
@@ -357,8 +368,8 @@ the directory mtime, in that order.
 
 1. **File history browser, standalone web UI** — done
 2. **Cockpit module** — done: same CLI, same screen, only `transport.js` differs
-3. **Dashboard and device management** — `devices`, `scrub` and `balance` are done;
-   next is device add/remove/replace, and a dashboard screen in the browser
+3. **Dashboard and device management** — `devices`, `scrub`, `balance` and the
+   dashboard screen are done; next is device add, remove and replace
 4. **Desktop GUI**
 
 Device management (3) can destroy a filesystem when it goes wrong, which is a different

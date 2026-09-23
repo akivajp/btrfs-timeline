@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<!--
+  ダッシュボード。ファイル履歴とは別のページにしてある。
+
+  「パスと時点」で表せるものは 1 つの画面にまとめたが、ここで見るのは
+  ファイルシステムそのものの健康状態で、別の主題である。権限の性質も違う
+  (こちらは root を要する操作に隣接する) ので、画面ごと分けておく。
+
+  **この画面は読むだけである。** scrub や balance の開始は root を要し、
+  このサーバーは利用者の権限で動く。押しても失敗するボタンを置く代わりに、
+  端末で実行すべきコマンドを危険度とともに示す。
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>btrfs-timeline</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header>
+  <h1>btrfs-timeline</h1>
+  <nav id="pages">
+    <a href="./" id="link-history"></a>
+    <a href="./devices.html" id="link-devices" class="current"></a>
+  </nav>
+  <label id="language-label">
+    <span id="language-text"></span>
+    <select id="language"></select>
+  </label>
+</header>
+
+<main id="dashboard"></main>
+
+<p id="status" role="status"></p>
+
+<script type="module" src="./devices.js"></script>
+</body>
+</html>

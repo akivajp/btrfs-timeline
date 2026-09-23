@@ -177,3 +177,42 @@ def test_a_translation_file_exists_for_every_translated_language(target):
         if i18n.load_catalog(code).get(cockpit.MENU_LABEL_KEY) == english:
             continue  # 訳さない選択をした言語
         assert os.path.isfile(os.path.join(directory, 'po.manifest.{0}.js'.format(code)))
+
+
+def test_both_screens_are_installed(target):
+    """ダッシュボードも同じ仕組みで載る。共有するファイルが増えるだけ。"""
+    directory = cockpit.install()
+    for name in ('index.html', 'app.js', 'devices.html', 'devices.js'):
+        assert os.path.isfile(os.path.join(directory, name)), name
+
+    with open(os.path.join(directory, 'manifest.json'), encoding='utf-8') as handle:
+        tools = json.load(handle)['tools']
+    assert tools['index']['path'] == 'index.html'
+    assert tools['devices']['path'] == 'devices.html'
+
+
+def test_every_menu_label_is_translated(target):
+    """メニューが 2 つになったので、両方とも訳が引かれる必要がある。"""
+    from btrfs_timeline import i18n
+
+    directory = cockpit.install()
+    with open(os.path.join(directory, 'po.manifest.ja.js'), encoding='utf-8') as handle:
+        text = handle.read()
+
+    english = i18n.load_catalog('en')
+    japanese = i18n.load_catalog('ja')
+    for key in cockpit.MENU_LABEL_KEYS:
+        assert json.dumps(english[key]) in text, key
+        assert japanese[key] in text, key
+
+
+def test_manifest_labels_match_the_catalog(target):
+    """label と訳を引くキーは同じ文字列。ずれると訳が永久に引かれない。"""
+    from btrfs_timeline import i18n
+
+    directory = cockpit.install()
+    with open(os.path.join(directory, 'manifest.json'), encoding='utf-8') as handle:
+        tools = json.load(handle)['tools']
+    english = i18n.load_catalog('en')
+    assert tools['index']['label'] == english['cockpit.menu-label']
+    assert tools['devices']['label'] == english['cockpit.menu-label-devices']

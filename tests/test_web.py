@@ -468,3 +468,49 @@ def test_cli_and_http_agree_on_the_startup_config(app, capsys):
     from_http = app.get('/api/config?lang=ja').json
     for key in ('version', 'language', 'languages', 'catalog'):
         assert from_cli[key] == from_http[key], key
+
+
+# --------------------------------------------------------------------------
+# ダッシュボード
+# --------------------------------------------------------------------------
+
+def test_devices_endpoint_reports_the_command_it_ran(app):
+    """裏で何が動いたかを、画面が出せるようにする。"""
+    data = app.get('/api/devices').json
+    assert 'filesystems' in data
+    for filesystem in data['filesystems']:
+        if filesystem['command']:
+            assert filesystem['command']['risk'] == 'safe'
+            assert 'argv' in filesystem['command']
+
+
+def test_suggested_commands_are_shown_with_sudo_and_never_run(app):
+    """root が要る操作は「端末で実行するもの」として示すだけ。
+
+    このサーバーは利用者の権限で動くので、ここから実行しても失敗する。
+    押しても失敗するボタンを置くより、コマンドを渡すほうが役に立つ。
+    """
+    for suggestion in app.get('/api/devices').json['suggestions']:
+        assert suggestion['needs_root'] is True
+        assert suggestion['argv'][0] == 'sudo'
+        assert suggestion['command'].startswith('sudo ')
+        assert suggestion['risk'] in ('caution', 'dangerous')
+
+
+def test_there_is_no_endpoint_that_starts_maintenance(app, tree):
+    """**変更を伴う操作の入口を作っていないこと自体を確かめる。**
+
+    うっかり生やしたら、ここで気付けるようにしておく。
+    """
+    for url in ('/api/scrub/start', '/api/balance/start', '/api/devices/remove'):
+        assert app.post(url, expect_errors=True).status_int in (404, 405)
+
+
+def test_scrub_status_is_readable_without_root(app, tree):
+    response = app.get('/api/scrub', {'path': str(tree)})
+    assert response.status_int == 200
+    assert response.json['command']['needs_root'] is False
+
+
+def test_scrub_needs_a_path(app):
+    assert app.get('/api/scrub', expect_errors=True).status_int == 400

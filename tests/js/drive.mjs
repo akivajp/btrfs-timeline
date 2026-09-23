@@ -14,55 +14,10 @@
 // import は本文より先に評価されるので、app.js が読み込まれる前に整う。
 import './prelude.mjs';
 
-const makeNode = (name) => {
-  const classes = new Set();
-  return {
-    id: name, textContent: '', value: '', placeholder: '', lang: '',
-    hidden: false, checked: false, className: '', type: '', returnValue: '',
-    children: [], listeners: {},
-    classList: {
-      add: (...names) => names.forEach((item) => classes.add(item)),
-      remove: (...names) => names.forEach((item) => classes.delete(item)),
-      toggle: (item, force) => {
-        const on = force === undefined ? !classes.has(item) : Boolean(force);
-        if (on) classes.add(item); else classes.delete(item);
-      },
-      contains: (item) => classes.has(item),
-    },
-    replaceChildren(...items) { this.children = items; },
-    append(...items) { this.children.push(...items); },
-    addEventListener(type, handler) { this.listeners[type] = handler; },
-    showModal() { this.open = true; },
-    close() { this.open = false; },
-  };
-};
-
-const nodes = new Map();
-const byId = (id) => {
-  if (!nodes.has(id)) nodes.set(id, makeNode(id));
-  return nodes.get(id);
-};
-
-globalThis.document = {
-  documentElement: makeNode('html'),
-  body: makeNode('body'),
-  getElementById: byId,
-  createElement: (tag) => makeNode(tag),
-};
-// localStorage が使えない環境の再現も兼ねている (読み書きが例外になっても動くこと)
-globalThis.localStorage = {
-  getItem() { throw new Error('storage is unavailable'); },
-  setItem() { throw new Error('storage is unavailable'); },
-};
+import { byId, settle } from './dom.mjs';
 
 const steps = [];
 const failures = [];
-
-const settle = async () => {
-  for (let i = 0; i < 8; i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-};
 
 const check = async (label) => {
   await settle();

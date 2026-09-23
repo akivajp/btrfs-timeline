@@ -72,3 +72,61 @@ export const fakeRestore = async (payload) => ({
   in_place: Boolean(payload.in_place), backup: null, is_symlink: false, size: 5,
   method: payload.dry_run ? 'dry-run' : 'reflink', dry_run: Boolean(payload.dry_run),
 });
+
+// --- ダッシュボード -------------------------------------------------------
+
+const device = (devid, name, overrides) => ({
+  devid, name, path: `/dev/${name}`, size: 1024 ** 4,
+  missing: false, writeable: true, replace_target: false,
+  errors: {
+    write_io_errs: 0, read_io_errs: 0, flush_io_errs: 0,
+    corruption_errs: 0, generation_errs: 0,
+  },
+  has_errors: false, ...overrides,
+});
+
+export const fakeDevices = async () => ({
+  filesystems: [{
+    uuid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+    label: 'tank',
+    mount_points: ['/mnt/tank'],
+    degraded: true,
+    exclusive_operation: 'none',
+    command: {
+      argv: ['btrfs', '--format', 'json', 'device', 'stats', '/mnt/tank'],
+      command: 'btrfs --format json device stats /mnt/tank',
+      risk: 'safe', needs_root: false, summary: 'read the error counters',
+    },
+    devices: [
+      device(1, 'sdd1'),
+      // 欠損と、エラーを抱えたデバイス。画面が目立たせられるかを見る
+      device(2, 'sdc1', { missing: true }),
+      device(3, 'sda1', {
+        errors: { corruption_errs: 7 }, has_errors: true,
+      }),
+    ],
+    allocations: [
+      { kind: 'data', profile: 'raid1', total_bytes: 1000, used_bytes: 500 },
+      { kind: 'metadata', profile: 'raid1', total_bytes: 200, used_bytes: 100 },
+    ],
+  }],
+  suggestions: [{
+    argv: ['sudo', 'btrfs', 'scrub', 'start', '/mnt/tank'],
+    command: 'sudo btrfs scrub start /mnt/tank',
+    risk: 'caution', needs_root: true,
+    summary: 'read every block and repair what it can',
+  }],
+});
+
+export const fakeScrub = async (path) => ({
+  path, state: 'running', running: true, percent: 48.59,
+  total_bytes: 100, scrubbed_bytes: 48,
+  duration: '0:00:05', time_left: '0:00:05', eta: '',
+  error_summary: 'no errors found', has_errors: false, counters: {},
+  raw: 'Status: running\n', ok: true,
+  command: {
+    argv: ['btrfs', 'scrub', 'status', '-R', '--raw', path],
+    command: `btrfs scrub status -R --raw ${path}`,
+    risk: 'safe', needs_root: false, summary: 'read the scrub state',
+  },
+});

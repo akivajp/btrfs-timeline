@@ -156,6 +156,7 @@
   "operation.balance-pause": "{path} の balance を一時停止する。あとで再開できる",
   "operation.balance-resume": "{path} の balance を、止めたところから続ける",
 
+  "cockpit.menu-label-devices": "btrfs デバイス",
   "cockpit.command": "Cockpit モジュールを設置する / 取り除く",
   "cockpit.argument.action": "install（設置）、uninstall（削除）、path（設置先の表示）",
   "cockpit.option.system": "/usr/share/cockpit に全ユーザー向けで設置する (root が必要)",
@@ -212,5 +213,12 @@
   "web.diff.binary": "どちらかの版がバイナリのため、表示するものがありません。",
   "web.diff.truncated": "差分を途中で打ち切りました。",
   "web.directory.hint": "これはディレクトリです。版を選ぶと、その時点の内容を表示します。",
+  "web.page.history": "履歴",
+  "web.page.devices": "デバイス",
+  "web.scrub.title": "scrub",
+  "web.scrub.state": "状態: {state} / エラー: {errors}",
+  "web.command.read": "これを読むために実行したコマンド",
+  "web.command.suggested": "必要に応じて実行するコマンド",
+  "web.command.why": "これらには root が必要で、このサーバーは利用者の権限で動いています。ここからは実行しません。端末で実行してください。",
   "web.read-only": "閲覧専用: このサーバーでは復元は無効です。"
 }

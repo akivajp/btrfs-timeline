@@ -10,4 +10,6 @@ export {
   fakePreview as fetchPreview,
   fakeDiff as fetchDiff,
   fakeRestore as restore,
+  fakeDevices as fetchDevices,
+  fakeScrub as fetchScrub,
 } from './fake-data.mjs';

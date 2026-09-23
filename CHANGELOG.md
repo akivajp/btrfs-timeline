@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-23
+
+### Added
+
+- **A dashboard in the browser**, on its own page and linked from the history screen:
+  what each filesystem is made of, allocation by profile, the scrub state, and devices
+  with errors or missing devices marked so they are not buried. `/api/devices` and
+  `/api/scrub` back it.
+- The same page is installed into the Cockpit module as a second entry, sharing every
+  file with the standalone one as the history screen already does.
+
+### Notes
+
+- **The dashboard is read-only on purpose.** Scrub and balance need root and the server
+  runs as the invoking user, so a button there would always fail. The page prints the
+  command to run in a terminal instead — `sudo` prefix and risk included, the same string
+  the CLI would show. Privileged actions belong in the Cockpit module, which has a
+  channel for them. A test asserts no endpoint exists that starts maintenance, so growing
+  one by accident fails the suite.
+
 ## [0.4.0] - 2026-09-23
 
 ### Added
@@ -164,6 +184,7 @@ release contains.
 - Terminal tables are padded by display width, so East Asian full-width characters line
   up.
 
+[0.5.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.5.0
 [0.4.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.4.0
 [0.3.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.3.0
 [0.2.1]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.2.1

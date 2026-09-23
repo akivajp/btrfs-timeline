@@ -40,6 +40,10 @@ export const fetchBrowse = (path, snapshot, showHidden) =>
 
 export const fetchHistory = (path) => request(`./api/history?${query(path)}`);
 
+export const fetchDevices = () => request('./api/devices');
+
+export const fetchScrub = (path) => request(`./api/scrub?${query(path)}`);
+
 export const fetchPreview = (path, index) =>
   request(`./api/preview?${query(path, { index })}`);
 

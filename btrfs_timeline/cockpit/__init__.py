@@ -35,14 +35,17 @@ STATIC_DIRECTORY = os.path.join(os.path.dirname(SOURCE_DIRECTORY), 'web', 'stati
 
 #: スタンドアロン Web UI とそのまま共有するファイル。
 #: **transport.js だけは共有しない** — 差し替えるのがそこだけ、という設計である。
-SHARED_FILES = ('index.html', 'app.js', 'i18n.js', 'style.css')
+SHARED_FILES = ('index.html', 'app.js', 'devices.html', 'devices.js',
+                'i18n.js', 'style.css')
 
 #: Cockpit 版に固有のファイル
 OWN_FILES = ('manifest.json', 'transport.js')
 
-#: メニューに出る名前。``manifest.json`` の label と一致していなければならない
-#: (Cockpit は原文をキーにして訳を引くため)
+#: メニューに出る名前と、その訳を引くカタログのキー。
+#: **値は ``manifest.json`` の label と一致していなければならない**
+#: (Cockpit は原文をキーにして訳を引くため)。
 MENU_LABEL_KEY = 'cockpit.menu-label'
+MENU_LABEL_KEYS = ('cockpit.menu-label', 'cockpit.menu-label-devices')
 
 
 def target_directory(system: bool = False) -> str:
@@ -88,19 +91,25 @@ def _write_manifest_translations(directory: str) -> None:
     訳語は **このツールのカタログから取る**。翻訳を追加した人が、メニューの名前だけ
     別の場所で改めて訳す必要が無いようにするため。
     """
-    source = i18n.load_catalog(i18n.FALLBACK_LANGUAGE).get(MENU_LABEL_KEY)
+    english = i18n.load_catalog(i18n.FALLBACK_LANGUAGE)
     for code in i18n.available_languages():
         if code == i18n.FALLBACK_LANGUAGE:
             continue  # 原文なので訳は要らない
         catalog = i18n.load_catalog(code)
-        translated = catalog.get(MENU_LABEL_KEY)
-        if not translated or translated == source:
+        pairs = [(english.get(key), catalog.get(key)) for key in MENU_LABEL_KEYS]
+        pairs = [(source, translated) for source, translated in pairs
+                 if source and translated and source != translated]
+        if not pairs:
             continue
         path = os.path.join(directory, 'po.manifest.{0}.js'.format(code))
         with open(path, 'w', encoding='utf-8') as handle:
             # Cockpit 本体が出力するものと同じ形にしてある。plural-forms は
             # このファイルが訳すのがメニュー名 1 つだけで複数形を含まないため
             # 使われないが、読み込み側が期待する可能性を考えて省かない。
+            entries = ''.join(
+                ' %s: [null, %s],\n' % (json.dumps(source, ensure_ascii=False),
+                                         json.dumps(translated, ensure_ascii=False))
+                for source, translated in pairs)
             handle.write(
                 'cockpit.locale({\n'
                 ' "": {\n'
@@ -108,12 +117,11 @@ def _write_manifest_translations(directory: str) -> None:
                 '  "language": %s,\n'
                 '  "language-direction": %s\n'
                 ' },\n'
-                ' %s: [null, %s]\n'
+                '%s'
                 '});\n' % (
                     json.dumps(code),
                     json.dumps(catalog.get('language.direction', 'ltr')),
-                    json.dumps(source, ensure_ascii=False),
-                    json.dumps(translated, ensure_ascii=False),
+                    entries,
                 ))
 
 

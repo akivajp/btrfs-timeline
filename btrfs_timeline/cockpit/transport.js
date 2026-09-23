@@ -58,6 +58,15 @@ export const fetchBrowse = (path, snapshot, showHidden) => run([
 
 export const fetchHistory = (path) => run(['history', path]);
 
+export const fetchDevices = async () => {
+  const payload = await run(['devices']);
+  // HTTP 版は「端末で実行すべきコマンド」も返す。Cockpit 版では
+  // CLI がそこまで面倒を見ないので、画面が同じ形を受け取れるよう補う。
+  return { ...payload, suggestions: payload.suggestions || [] };
+};
+
+export const fetchScrub = (path) => run(['scrub', 'status', path]);
+
 export const fetchPreview = (path, index) =>
   run(['preview', path, '--index', String(index)]);
 
