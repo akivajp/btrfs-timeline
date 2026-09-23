@@ -91,4 +91,5 @@ console.log(JSON.stringify({
   actionsHeader: cell('versions-head', 6),
   historyLink: byId('link-history').textContent,
   devicesLink: byId('link-devices').textContent,
+  pagesHidden: byId('pages').hidden,
 }));

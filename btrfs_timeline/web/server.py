@@ -130,7 +130,7 @@ def create_app(settings: Settings, credentials: Optional[Credentials] = None):
     # そのためルート直下でも配信する必要がある。
     # index.html も名前で配れるようにする。Cockpit には「ディレクトリ」が無く
     # ``./`` は解決できないため、ページ間のリンクは実ファイル名を指す
-    for name in ('app.js', 'devices.js', 'transport.js', 'i18n.js',
+    for name in ('app.js', 'devices.js', 'transport.js', 'i18n.js', 'pages.js',
                  'style.css', 'index.html', 'devices.html'):
         app.route('/' + name, callback=(lambda target=name: asset(target)))
 

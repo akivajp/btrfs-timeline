@@ -36,7 +36,7 @@ STATIC_DIRECTORY = os.path.join(os.path.dirname(SOURCE_DIRECTORY), 'web', 'stati
 #: スタンドアロン Web UI とそのまま共有するファイル。
 #: **transport.js だけは共有しない** — 差し替えるのがそこだけ、という設計である。
 SHARED_FILES = ('index.html', 'app.js', 'devices.html', 'devices.js',
-                'i18n.js', 'style.css')
+                'i18n.js', 'pages.js', 'style.css')
 
 #: Cockpit 版に固有のファイル
 OWN_FILES = ('manifest.json', 'transport.js')

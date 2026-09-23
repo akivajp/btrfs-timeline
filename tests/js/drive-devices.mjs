@@ -50,4 +50,5 @@ console.log(JSON.stringify({
   languageOptions: (byId('language').children || []).length,
   historyLink: byId('link-history').textContent,
   devicesLink: byId('link-devices').textContent,
+  pagesHidden: byId('pages').hidden,
 }));

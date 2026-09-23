@@ -43,7 +43,7 @@ def as_module(tmp_path, name: str):
     with open(source, encoding='utf-8') as handle:
         text = handle.read()
     # 拡張子を変えた以上、モジュール間の参照も合わせる必要がある
-    for module in ('transport', 'i18n', 'command'):
+    for module in ('transport', 'i18n', 'command', 'pages'):
         text = text.replace("'./{0}.js'".format(module), "'./{0}.mjs'".format(module))
     target.write_text(text, encoding='utf-8')
     return target
@@ -111,7 +111,7 @@ def test_every_ui_module_parses(tmp_path):
 
     DOM が無いので実行はできないが、構文エラーで真っ白になる事故は防げる。
     """
-    for name in ('app.js', 'transport.js', 'i18n.js'):
+    for name in ('app.js', 'transport.js', 'i18n.js', 'pages.js', 'devices.js'):
         subprocess.run([NODE, '--check', str(as_module(tmp_path, name))], check=True)
 
 
@@ -131,7 +131,7 @@ def _stage(tmp_path, flavour):
     両方で使う。**差し替えるのは transport だけ** という設計がそのまま効いており、
     テストは Cockpit 版が差し替えるのと同じ場所を差し替えているに過ぎない。
     """
-    for name in ('app.js', 'devices.js', 'i18n.js'):
+    for name in ('app.js', 'devices.js', 'i18n.js', 'pages.js'):
         as_module(tmp_path, name)
     for name in ('drive.mjs', 'drive-devices.mjs', 'dom.mjs', 'fake-data.mjs'):
         _copy(os.path.join(FIXTURES, name), tmp_path / name)
@@ -430,3 +430,17 @@ def test_pages_link_by_file_name_not_by_directory():
         assert 'href="./"' not in markup, name
         assert 'href="./index.html"' in markup, name
         assert 'href="./devices.html"' in markup, name
+
+
+def test_in_page_links_are_hidden_under_cockpit(driven, driven_cockpit,
+                                                dashboard, dashboard_cockpit):
+    """Cockpit には左のツールメニューがあるので、画面の中には置かない。
+
+    同じ移動手段が 2 つあると、どちらを使えばよいのかを利用者に考えさせる。
+    シェルを持たないスタンドアロンでは、逆にこれが唯一の移動手段になる。
+    """
+    for screen in (driven, dashboard):
+        assert screen['pagesHidden'] is False
+        assert screen['historyLink']
+    for screen in (driven_cockpit, dashboard_cockpit):
+        assert screen['pagesHidden'] is True

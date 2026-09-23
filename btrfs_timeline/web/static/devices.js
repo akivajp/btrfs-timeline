@@ -11,6 +11,7 @@
 import {
   FLAVOUR, canElevate, fetchConfig, fetchDevices, fetchScrub, onPrivilegeChange,
 } from './transport.js';
+import { applyPageLinks } from './pages.js';
 import { translate } from './i18n.js';
 
 let catalog = {};
@@ -212,8 +213,7 @@ const renderFilesystem = (filesystem, scrub) => {
 const applyLabels = () => {
   document.documentElement.lang = config.language;
   el('language-text').textContent = t('web.language');
-  el('link-history').textContent = t('web.page.history');
-  el('link-devices').textContent = t('web.page.devices');
+  applyPageLinks(t);
 };
 
 const renderLanguageOptions = () => {
