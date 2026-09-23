@@ -88,8 +88,21 @@ def test_index_is_served_without_server_side_rendering(app):
 
 def test_assets_are_served_at_the_root(app):
     """index.html は ./app.js を相対参照する。Cockpit 版でも同じ形になるため。"""
-    for asset in ('/app.js', '/transport.js', '/style.css'):
+    for asset in ('/app.js', '/transport.js', '/i18n.js', '/style.css'):
         assert app.get(asset).status_int == 200
+
+
+def test_assets_must_be_revalidated(app):
+    """更新後に「新しい HTML と古い app.js」が組み合わさる事故を防ぐ。
+
+    Cache-Control が無いと、ブラウザはナビゲーションだけ再検証してサブリソースは
+    ヒューリスティックに古いまま使う。画面の要素は増えているのに何も起きない、
+    という最も分かりにくい壊れ方になり、利用者にスーパーリロードを強いることになる。
+    no-cache は「キャッシュするな」ではなく「使う前に必ず問い合わせろ」なので、
+    変わっていなければ 304 で済む。
+    """
+    for asset in ('/', '/app.js', '/transport.js', '/i18n.js', '/style.css'):
+        assert app.get(asset).headers.get('Cache-Control') == 'no-cache', asset
 
 
 def test_config_carries_the_translation_catalog(app):

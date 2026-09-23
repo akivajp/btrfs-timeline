@@ -16,6 +16,7 @@
 import {
   fetchConfig, fetchBrowse, fetchHistory, fetchPreview, fetchDiff, restore,
 } from './transport.js';
+import { translate } from './i18n.js';
 
 let catalog = {};
 let config = {};
@@ -64,12 +65,8 @@ let language = remembered(STORAGE_LANGUAGE, '') || null;
 const listing = (path, snapshotId) => fetchBrowse(path, snapshotId, showHidden);
 
 // CLI と同じ JSON カタログを使う。プレースホルダも同じ名前付き形式。
-const t = (key, params) => {
-  const template = catalog[key] || key;
-  if (!params) return template;
-  return template.replace(/\{(\w+)\}/g, (match, name) =>
-    (name in params ? String(params[name]) : match));
-};
+// 引き方の規則そのものは i18n.js にある (そこだけテストを当てられるようにするため)。
+const t = (key, params) => translate(catalog, key, params);
 
 const setStatus = (message, isError) => {
   const node = el('status');

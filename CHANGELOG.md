@@ -58,3 +58,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/api/config` reports `languages` as `{code, name}` objects rather than bare codes.
 - The `web` extra no longer needs Jinja2: the HTML carries no server-rendered data, which
   is what lets the Cockpit module serve the same file.
+
+### Fixed
+
+- The web UI printed a message key (`web.actions`) instead of nothing where a catalog
+  entry is deliberately empty. Presence was tested with `||`, so an empty translation
+  counted as missing; it is now tested for the key itself, matching the Python side.
+- Static assets are served with `Cache-Control: no-cache`, so a browser revalidates them
+  instead of pairing a freshly fetched page with a stale `app.js`. Revalidation still
+  answers 304 when nothing changed.
+- The browser-side translation lookup moved to `static/i18n.js`, which can be imported
+  without touching the DOM, and is now covered by tests that run under Node when it is
+  available — including a check that it agrees with the Python implementation.

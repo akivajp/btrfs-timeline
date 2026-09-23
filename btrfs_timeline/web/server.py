@@ -100,21 +100,36 @@ def create_app(settings: Settings, credentials: Optional[Credentials] = None):
     # 画面と静的ファイル
     # ------------------------------------------------------------------
 
+    def asset(name):
+        """静的ファイルを、**毎回検証させる** 形で返す。
+
+        ``Cache-Control: no-cache`` は「キャッシュするな」ではなく
+        「使う前に必ず問い合わせろ」という意味で、変わっていなければ 304 が返る。
+
+        これを付けないと、ブラウザは HTML だけを取り直して ``app.js`` は
+        ヒューリスティックに古いまま使う (ナビゲーションは再検証するが、
+        サブリソースはしない)。その結果 **新しい画面に古いコードが載る** という、
+        一番分かりにくい壊れ方をする。更新のたびにスーパーリロードを
+        要求することになるので、ここで断つ。
+        """
+        response = bottle.static_file(name, root=STATIC_DIRECTORY)
+        response.set_header('Cache-Control', 'no-cache')
+        return response
+
     @app.route('/')
     def index():
         """画面本体。サーバー側では一切書き換えない (Cockpit 版と同じファイル)。"""
-        return bottle.static_file('index.html', root=STATIC_DIRECTORY)
+        return asset('index.html')
 
     # index.html は ``./app.js`` のように相対パスで参照する。Cockpit モジュールでは
     # 同じディレクトリに並ぶので、そちらでも同じ HTML がそのまま動く。
     # そのためルート直下でも配信する必要がある。
-    for asset in ('app.js', 'transport.js', 'style.css'):
-        app.route('/' + asset, callback=(
-            lambda name=asset: bottle.static_file(name, root=STATIC_DIRECTORY)))
+    for name in ('app.js', 'transport.js', 'i18n.js', 'style.css'):
+        app.route('/' + name, callback=(lambda target=name: asset(target)))
 
     @app.route('/static/<path:path>')
     def static_files(path):
-        return bottle.static_file(path, root=STATIC_DIRECTORY)
+        return asset(path)
 
     # ------------------------------------------------------------------
     # API
