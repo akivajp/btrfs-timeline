@@ -10,6 +10,10 @@
 // DOM は本物を用意せず、app.js が使う分だけを埋める。ブラウザを立ち上げずに
 // ロジックだけ確かめたいので、これで足りる。
 
+// 経路ごとの下ごしらえ (スタンドアロン版では何もしない)。
+// import は本文より先に評価されるので、app.js が読み込まれる前に整う。
+import './prelude.mjs';
+
 const makeNode = (name) => {
   const classes = new Set();
   return {
@@ -114,6 +118,13 @@ try {
   failures.push(`想定外の例外: ${error.message}`);
 }
 
+// 途中で落ちた場合でも、何が起きたかを必ず出す。ここで例外にすると
+// failures の中身が見えなくなり、原因が分からなくなる。
+const cell = (id, position) => {
+  const found = byId(id).children[position];
+  return found === undefined ? null : found.textContent;
+};
+
 console.log(JSON.stringify({
   steps,
   failures,
@@ -122,5 +133,5 @@ console.log(JSON.stringify({
   preview: byId('preview').textContent,
   language: byId('language').value,
   hiddenLabel: byId('hidden-text').textContent,
-  actionsHeader: byId('versions-head').children[6].textContent,
+  actionsHeader: cell('versions-head', 6),
 }));

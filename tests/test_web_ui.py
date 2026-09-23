@@ -24,6 +24,8 @@ from btrfs_timeline.web import server as server_module
 NODE = shutil.which('node')
 STATIC = server_module.STATIC_DIRECTORY
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'js')
+COCKPIT = os.path.join(os.path.dirname(STATIC), '..', 'cockpit')
+COCKPIT = os.path.normpath(COCKPIT)
 
 pytestmark = pytest.mark.skipif(NODE is None, reason='node が無いので飛ばします')
 
@@ -41,7 +43,7 @@ def as_module(tmp_path, name: str):
     with open(source, encoding='utf-8') as handle:
         text = handle.read()
     # 拡張子を変えた以上、モジュール間の参照も合わせる必要がある
-    for module in ('transport', 'i18n'):
+    for module in ('transport', 'i18n', 'command'):
         text = text.replace("'./{0}.js'".format(module), "'./{0}.mjs'".format(module))
     target.write_text(text, encoding='utf-8')
     return target
@@ -117,17 +119,35 @@ def test_every_ui_module_parses(tmp_path):
 # 画面を実際に動かす
 # --------------------------------------------------------------------------
 
-def _stage(tmp_path):
-    """本物の画面コードと、テスト用の transport を同じ場所に並べる。
+def _copy(source, target):
+    with open(source, encoding='utf-8') as handle:
+        target.write_text(handle.read(), encoding='utf-8')
 
-    ``transport.js`` だけを差し替えれば画面が動く、という設計がそのまま効いている
-    (Cockpit 版が差し替えるのと同じ場所を、テストが差し替えているだけ)。
+
+def _stage(tmp_path, flavour):
+    """本物の画面コードと、経路ごとのスタブを同じ場所に並べる。
+
+    ``app.js`` / ``i18n.js`` / ``style.css`` / ``index.html`` は 1 バイトも変えずに
+    両方で使う。**差し替えるのは transport だけ** という設計がそのまま効いており、
+    テストは Cockpit 版が差し替えるのと同じ場所を差し替えているに過ぎない。
     """
     for name in ('app.js', 'i18n.js'):
         as_module(tmp_path, name)
-    for name in ('transport.mjs', 'drive.mjs'):
-        with open(os.path.join(FIXTURES, name), encoding='utf-8') as handle:
-            (tmp_path / name).write_text(handle.read(), encoding='utf-8')
+    _copy(os.path.join(FIXTURES, 'drive.mjs'), tmp_path / 'drive.mjs')
+    _copy(os.path.join(FIXTURES, 'fake-data.mjs'), tmp_path / 'fake-data.mjs')
+
+    if flavour == 'cockpit':
+        # Cockpit 版の transport は本物をそのまま使う (スタブは cockpit.spawn の側)
+        with open(os.path.join(COCKPIT, 'transport.js'), encoding='utf-8') as handle:
+            text = handle.read().replace("'./command.js'", "'./command.mjs'")
+        (tmp_path / 'transport.mjs').write_text(text, encoding='utf-8')
+        (tmp_path / 'command.mjs').write_text(
+            "export const COMMAND = ['/usr/bin/btrfs-timeline'];\n", encoding='utf-8')
+        _copy(os.path.join(FIXTURES, 'prelude-cockpit.mjs'), tmp_path / 'prelude.mjs')
+    else:
+        _copy(os.path.join(FIXTURES, 'transport.mjs'), tmp_path / 'transport.mjs')
+        _copy(os.path.join(FIXTURES, 'prelude-web.mjs'), tmp_path / 'prelude.mjs')
+
     # 本物のカタログを使う。訳文の引き方まで含めて確かめたいので、作り物にしない
     catalogs = {code: i18n.load_catalog(code) for code in i18n.available_languages()}
     (tmp_path / 'fixture.mjs').write_text(
@@ -136,15 +156,24 @@ def _stage(tmp_path):
     return tmp_path / 'drive.mjs'
 
 
-@pytest.fixture(scope='module')
-def driven(tmp_path_factory):
-    """画面をひととおり操作した結果を返す (重いので 1 回だけ実行する)。"""
-    tmp_path = tmp_path_factory.mktemp('ui')
-    script = _stage(tmp_path)
+def _drive(tmp_path, flavour):
+    script = _stage(tmp_path, flavour)
     completed = subprocess.run(
         [NODE, str(script)], capture_output=True, text=True, cwd=str(tmp_path))
     assert completed.returncode == 0, completed.stderr
     return json.loads(completed.stdout.strip().splitlines()[-1])
+
+
+@pytest.fixture(scope='module')
+def driven(tmp_path_factory):
+    """スタンドアロン版の画面をひととおり操作した結果 (重いので 1 回だけ)。"""
+    return _drive(tmp_path_factory.mktemp('ui-web'), 'web')
+
+
+@pytest.fixture(scope='module')
+def driven_cockpit(tmp_path_factory):
+    """Cockpit 版の transport を通して、同じ操作を行った結果。"""
+    return _drive(tmp_path_factory.mktemp('ui-cockpit'), 'cockpit')
 
 
 def test_no_step_reports_an_error(driven):
@@ -182,3 +211,41 @@ def test_switching_language_reaches_the_labels(driven):
     """言語を切り替えると、画面のラベルまで差し替わる。"""
     assert driven['language'] == 'ja'
     assert driven['hiddenLabel'] == '隠しファイルを表示'
+
+
+# --------------------------------------------------------------------------
+# Cockpit 版 — 差し替えるのは transport だけ、という主張の検証
+# --------------------------------------------------------------------------
+
+def test_cockpit_transport_drives_the_same_screen(driven_cockpit):
+    """同じ app.js が、cockpit.spawn 経由でも同じ操作を最後まで行える。
+
+    スタブは argv を実際に解釈するので、transport が組み立てるコマンドが
+    間違っていればここで見つからずに失敗する。
+    """
+    assert driven_cockpit['failures'] == []
+    assert driven_cockpit['entries'] > 0
+    assert driven_cockpit['versions'] > 0
+    assert driven_cockpit['preview']
+
+
+def test_both_front_ends_end_up_with_the_same_screen(driven, driven_cockpit):
+    """スタンドアロン版と Cockpit 版で、画面の状態が一致する。
+
+    **これがこの設計の主張そのもの** である。経路が違うだけで、利用者が見るものは
+    同じでなければならない。ずれたら、片方だけで起きる不具合が生まれている。
+    """
+    assert driven_cockpit['steps'] == driven['steps']
+    assert driven_cockpit['entries'] == driven['entries']
+    assert driven_cockpit['versions'] == driven['versions']
+    assert driven_cockpit['preview'] == driven['preview']
+    assert driven_cockpit['hiddenLabel'] == driven['hiddenLabel']
+    assert driven_cockpit['actionsHeader'] == driven['actionsHeader']
+
+
+def test_cockpit_module_parses(tmp_path):
+    """Cockpit 版の transport も構文として壊れていない。"""
+    target = tmp_path / 'cockpit-transport.mjs'
+    with open(os.path.join(COCKPIT, 'transport.js'), encoding='utf-8') as handle:
+        target.write_text(handle.read(), encoding='utf-8')
+    subprocess.run([NODE, '--check', str(target)], check=True)

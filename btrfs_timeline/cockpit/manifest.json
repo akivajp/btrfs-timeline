@@ -1,0 +1,13 @@
+{
+  "version": 0,
+  "requires": {
+    "cockpit": "266"
+  },
+  "tools": {
+    "index": {
+      "label": "File history",
+      "path": "index.html",
+      "order": 20
+    }
+  }
+}
