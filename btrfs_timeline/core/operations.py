@@ -58,6 +58,15 @@ class Operation(NamedTuple):
     params: dict
     """``summary_key`` に埋めるパラメータ"""
 
+    confirm_token: Optional[str] = None
+    """実行を許すために、利用者が正確に入力しなければならない文字列。
+
+    危険な操作では「はい」を押させるだけでは足りない。**失われる側のデバイス名**を
+    打たせることで、対象を取り違えたまま進むことを防ぐ。GitHub がリポジトリの削除で
+    名前を打たせるのと同じ考え方で、狙いは手間をかけさせることではなく、
+    **何に対して実行しようとしているのかを本人に確認させる**ことにある。
+    """
+
     def display(self) -> str:
         """画面や端末にそのまま出せるコマンド文字列。
 
@@ -88,6 +97,7 @@ class Operation(NamedTuple):
             'risk': self.risk,
             'needs_root': self.needs_root,
             'summary': self.summary(),
+            'confirm_token': self.confirm_token,
         }
 
 
@@ -112,7 +122,8 @@ def _quote(part: str) -> str:
 
 
 def describe(argv, risk: str = SAFE, needs_root: bool = False,
-             summary_key: str = 'operation.unknown', **params) -> Operation:
+             summary_key: str = 'operation.unknown',
+             confirm_token: Optional[str] = None, **params) -> Operation:
     """実行せずに ``Operation`` を組み立てる。
 
     画面は「これから何を実行するか」をこの形で受け取り、確認を取ってから
@@ -120,27 +131,42 @@ def describe(argv, risk: str = SAFE, needs_root: bool = False,
     """
     if risk not in RISKS:
         raise ValueError('unknown risk level: {0}'.format(risk))
+    if risk == DANGEROUS and confirm_token is None:
+        # 危険な操作に合言葉が無いのは、たいてい書き忘れである。
+        # 「はい」だけで通る危険な操作を作らせない
+        raise ValueError('a dangerous operation needs a confirm_token')
     return Operation(argv=list(argv), risk=risk, needs_root=needs_root,
-                     summary_key=summary_key, params=params)
+                     summary_key=summary_key, params=params,
+                     confirm_token=confirm_token)
 
 
 def run(operation: Operation, confirmed: bool = False,
+        confirmation: Optional[str] = None,
         timeout: Optional[float] = None) -> Result:
     """コマンドを実行する。
 
     Args:
         operation: 実行する操作。
-        confirmed: ``DANGEROUS`` の操作では、これが True でなければ実行しない。
-            **既定で False なのは意図的である。** 確認を取り忘れた呼び出しは
-            通らないようにしてある。
+        confirmed: 合言葉を持たない ``DANGEROUS`` の操作を許すための単純な同意。
+        confirmation: 利用者が入力した文字列。``confirm_token`` を持つ操作では
+            **これが一致しなければ実行しない**。
         timeout: 秒。超えると ``subprocess.TimeoutExpired``。
 
     Raises:
         PermissionError: 危険な操作を、確認なしで実行しようとした。
+
+    **既定で拒否するのは意図的である。** 確認を取り忘れた呼び出しが通ってしまうと、
+    この仕組み全体が意味を失う。判断を個々の呼び出し箇所に任せない。
     """
-    if operation.risk == DANGEROUS and not confirmed:
-        raise PermissionError(i18n.translate(
-            'error.confirmation-required', command=operation.display()))
+    if operation.risk == DANGEROUS:
+        if operation.confirm_token is not None:
+            if confirmation != operation.confirm_token:
+                raise PermissionError(i18n.translate(
+                    'error.token-required', token=operation.confirm_token,
+                    command=operation.display()))
+        elif not confirmed:
+            raise PermissionError(i18n.translate(
+                'error.confirmation-required', command=operation.display()))
 
     completed = subprocess.run(
         operation.argv, capture_output=True, text=True, timeout=timeout)

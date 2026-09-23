@@ -58,8 +58,13 @@ Error summary:    csum=72
 # 組み立てたコマンド
 # --------------------------------------------------------------------------
 
-def test_scrub_status_does_not_need_root():
-    """scrub の状態だけは非特権で読める (``/var/lib/btrfs`` の記録なので)。"""
+def test_scrub_status_is_attempted_without_root():
+    """前もって root を要求しない。
+
+    まだ scrub していなければ非特権で通るため、断るより試すほうがよい。
+    一度でも scrub すると記録ファイルが root 専用になって読めなくなるが、
+    それは実行して分かることで、そのときは sudo 付きのコマンドを示す。
+    """
     operation = maintenance.scrub_status_operation('/home')
     assert operation.argv == ['btrfs', 'scrub', 'status', '-R', '--raw', '/home']
     assert operation.risk == operations.SAFE
@@ -174,8 +179,19 @@ def test_unparseable_output_does_not_raise():
     assert status.raw == 'something entirely unexpected'
 
 
-def test_empty_output_does_not_raise():
-    assert maintenance.parse_scrub_status('').state == 'none'
+def test_no_output_is_not_the_same_as_no_scrub():
+    """**空の出力を「scrub したことがない」と言い切らない。**
+
+    記録ファイルは root 専用で作られるため、一度 scrub したあとの非特権では
+    出力が空になる。これを ``none`` にすると、画面が事実と逆のことを言う。
+    """
+    assert maintenance.parse_scrub_status('').state == 'unknown'
+    assert maintenance.parse_scrub_status('   ').state == 'unknown'
+
+
+def test_btrfs_saying_there_are_no_stats_is_none():
+    """btrfs 自身が「記録が無い」と答えたときだけ ``none``。"""
+    assert maintenance.parse_scrub_status(NEVER_SCRUBBED).state == 'none'
 
 
 # --------------------------------------------------------------------------
@@ -228,8 +244,8 @@ def never_runs(monkeypatch):
 
     attempted = []
 
-    def fake_run(operation, confirmed=False, timeout=None):
-        attempted.append(operation)
+    def fake_run(operation, confirmed=False, confirmation=None, timeout=None):
+        attempted.append((operation, confirmation))
         return operations_module.Result(operation=operation, returncode=0,
                                         stdout='', stderr='')
 
@@ -262,7 +278,7 @@ def test_yes_allows_it_to_run(never_runs, as_root, capsys):
     from btrfs_timeline import cli
 
     assert cli.main(['scrub', 'start', '/home', '--yes']) == 0
-    assert [o.argv for o in never_runs] == [['btrfs', 'scrub', 'start', '/home']]
+    assert [o.argv for o, _c in never_runs] == [['btrfs', 'scrub', 'start', '/home']]
     assert 'btrfs scrub start /home' in capsys.readouterr().out
 
 
@@ -290,7 +306,7 @@ def test_reading_status_asks_nothing(never_runs, monkeypatch):
 
     monkeypatch.setattr('btrfs_timeline.cli.sys.stdin.isatty', lambda: False)
     assert cli.main(['scrub', 'status', '/home']) == 0
-    assert [o.argv[:3] for o in never_runs] == [['btrfs', 'scrub', 'status']]
+    assert [o.argv[:3] for o, _c in never_runs] == [['btrfs', 'scrub', 'status']]
 
 
 def test_without_root_it_says_exactly_what_to_run(never_runs, monkeypatch, capsys):
@@ -308,7 +324,7 @@ def test_sudo_is_used_only_when_asked(never_runs, monkeypatch):
 
     monkeypatch.setattr('btrfs_timeline.cli.os.geteuid', lambda: 1000)
     assert cli.main(['balance', 'start', '/home', '--yes', '--sudo']) == 0
-    assert never_runs[0].argv == ['sudo', 'btrfs', 'balance', 'start', '/home']
+    assert never_runs[0][0].argv == ['sudo', 'btrfs', 'balance', 'start', '/home']
 
 
 def test_what_is_shown_is_what_is_run(never_runs, monkeypatch, capsys):
@@ -321,4 +337,4 @@ def test_what_is_shown_is_what_is_run(never_runs, monkeypatch, capsys):
     monkeypatch.setattr('btrfs_timeline.cli.os.geteuid', lambda: 1000)
     cli.main(['scrub', 'start', '/home', '--yes', '--sudo'])
     shown = capsys.readouterr().out
-    assert never_runs[0].display() in shown
+    assert never_runs[0][0].display() in shown

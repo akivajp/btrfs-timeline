@@ -14,8 +14,20 @@
   ただし全体 balance は全データを読み書きするので、時間も I/O も相応にかかる。
 
 どちらも root を要する。閲覧側と違い、ここはカーネルが ``CAP_SYS_ADMIN`` を
-要求するため、非特権では回避のしようがない。``balance status`` までが root 必須で、
-``scrub status`` だけは ``/var/lib/btrfs/`` の記録を読むので非特権で見られる。
+要求するため、非特権では回避のしようがない。
+
+``scrub status`` については **一度取り違えた**。これは ``/var/lib/btrfs/`` の記録を
+読むだけなので非特権で動く、と考えていたが、正しくはこうである:
+
+- 一度も scrub していなければ記録ファイルが無く、``no stats available`` を返して成功する
+- **一度でも scrub すると、記録ファイルが root 専用 (0600) で作られる。**
+  以降、非特権では ``failed to open status file: Permission denied`` で失敗する
+
+つまり「状態を知りたい」という最も普通の場面では root が要る。実機で確かめたときに
+成功していたのは、そのファイルシステムで一度も scrub していなかったからに過ぎない。
+それでも ``needs_root`` を False のままにしてあるのは、**試してみる価値があるため**
+である。前もって断るより、動く場合には動かし、駄目なら sudo 付きの
+コマンドを示すほうが役に立つ。
 """
 
 from __future__ import annotations
@@ -25,8 +37,8 @@ from typing import NamedTuple, Optional
 
 from . import operations
 
-#: ``scrub status`` が報告する状態
-SCRUB_STATES = ('running', 'finished', 'aborted', 'interrupted', 'none')
+#: ``scrub status`` が報告する状態。``unknown`` は「答えを受け取れなかった」
+SCRUB_STATES = ('running', 'finished', 'aborted', 'interrupted', 'none', 'unknown')
 
 #: ``Bytes scrubbed: 13.76GiB  (48.59%)`` から割合を取る
 RE_PERCENT = re.compile(r'\(([\d.]+)%\)')
@@ -40,7 +52,8 @@ class ScrubStatus(NamedTuple):
     """``btrfs scrub status`` の結果。"""
 
     state: str
-    """``running`` / ``finished`` / ``aborted`` / ``interrupted`` / ``none``"""
+    """``running`` / ``finished`` / ``aborted`` / ``interrupted`` / ``none`` /
+    ``unknown`` (答えを受け取れなかった)"""
 
     total_bytes: Optional[int]
     scrubbed_bytes: Optional[int]
@@ -103,7 +116,11 @@ class BalanceStatus(NamedTuple):
 def scrub_status_operation(path: str) -> operations.Operation:
     """scrub の状態を見る。
 
-    ``/var/lib/btrfs/`` の記録を読むだけなので、これだけは非特権でも通る。
+    ``needs_root`` を False にしてあるが、**非特権で必ず通るわけではない**。
+    記録ファイル ``/var/lib/btrfs/scrub.status.<UUID>`` は root 専用で作られるため、
+    一度でも scrub した後は読めなくなる (モジュール冒頭に経緯を書いた)。
+    前もって断らないのは、まだ scrub していない場合には通るからで、
+    失敗したときは呼び出し側が sudo 付きのコマンドを示す。
     """
     return operations.describe(
         ['btrfs', 'scrub', 'status', '-R', '--raw', path],
@@ -215,7 +232,18 @@ def parse_scrub_status(text: str) -> ScrubStatus:
     書式は「``名前:`` 値」が並ぶだけで、``-R`` を付けると生のカウンタが
     タブ字下げで続く。**一度も scrub していないと ``no stats available`` の
     1 行だけになる** ので、そこを状態 ``none`` として扱う。
+
+    出力そのものが空の場合は ``unknown`` にする。これは「btrfs が『記録が無い』と
+    答えた」のとは違い、**こちらが答えを受け取れなかった** ことを意味する
+    (権限不足など)。両者を ``none`` に潰すと、画面が「scrub したことがない」と
+    言い切ってしまう。
     """
+    if not (text or '').strip():
+        return ScrubStatus(
+            state='unknown', total_bytes=None, scrubbed_bytes=None, percent=None,
+            duration='', time_left='', eta='', error_summary='', counters={},
+            raw=text or '')
+
     header = {}
     counters = {}
 

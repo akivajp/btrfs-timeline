@@ -525,6 +525,32 @@ def _prepare(operation, use_sudo: bool):
     return operation
 
 
+def _confirm_token(operation, provided) -> bool:
+    """危険な操作の合言葉を確かめる。
+
+    **「はい」では通さない。** 打ち間違いで別のデバイスを指したまま進むのを
+    防ぎたいので、失われる側の名前そのものを入力させる。
+    """
+    expected = operation.confirm_token
+    if provided is not None:
+        if provided == expected:
+            return True
+        _fail('error.token-mismatch')
+        return False
+    if not sys.stdin.isatty():
+        _fail('error.needs-confirm', token=expected)
+        return False
+    try:
+        answer = input(_('operation.confirm-token-prompt', token=expected))
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+    if answer.strip() == expected:
+        return True
+    _fail('error.token-mismatch')
+    return False
+
+
 def _confirm(operation, assume_yes: bool) -> bool:
     """実行してよいかを確かめる。
 
@@ -536,6 +562,9 @@ def _confirm(operation, assume_yes: bool) -> bool:
     print(_('operation.risk-line', risk=_risk_label(operation.risk),
             summary=operation.summary()))
     if operation.risk == operations_module.SAFE:
+        return True
+    if operation.confirm_token is not None:
+        # 危険な操作。--yes では通さない (_execute が合言葉を確かめる)
         return True
     if assume_yes:
         return True
@@ -560,8 +589,15 @@ def _execute(operation, args) -> int:
         print(_('operation.cancelled'))
         return 1
 
+    confirmation = None
+    if prepared.confirm_token is not None:
+        if not _confirm_token(prepared, getattr(args, 'confirm', None)):
+            print(_('operation.cancelled'))
+            return 1
+        confirmation = prepared.confirm_token
+
     try:
-        result = operations_module.run(prepared)
+        result = operations_module.run(prepared, confirmation=confirmation)
     except OSError as error:
         print(_('error.prefix', message=error), file=sys.stderr)
         return 1
@@ -599,6 +635,10 @@ def _read_status(operation, args, parse, to_dict) -> int:
             risk=_risk_label(prepared.risk)))
     if not result.ok:
         print(result.stderr.rstrip(), file=sys.stderr)
+        # 読むだけの操作でも権限で弾かれることがある (scrub の記録ファイルは
+        # root 専用で作られる)。前もって断るより、駄目だったときに道を示す
+        if os.geteuid() != 0 and not prepared.argv[0] == 'sudo':
+            _fail('error.try-with-sudo', command=prepared.with_sudo().display())
         return 1
     print(status.raw.rstrip())
     return 0
@@ -750,6 +790,45 @@ def cmd_devices(args: argparse.Namespace) -> int:
                               columns=((10, '<'), (12, '<'), (12, '>'))))
         print()
     return 0
+
+
+def cmd_device(args: argparse.Namespace) -> int:
+    """デバイスを追加・取り外し・置換する。
+
+    ロードマップで唯一「失敗するとプールごと失う」段であり、確認も一段強い。
+    """
+    path = os.path.abspath(args.path)
+
+    if args.action == 'replace-status':
+        operation = devices_module.replace_status_operation(path)
+        return _read_status(operation, args, lambda text: _RawStatus(text),
+                            lambda status: {'raw': status.raw})
+    if args.action == 'replace-cancel':
+        return _execute(devices_module.replace_cancel_operation(path), args)
+    if args.action == 'add':
+        return _execute(
+            devices_module.add_operation(args.device, path, force=args.force), args)
+    if args.action == 'remove':
+        return _execute(devices_module.remove_operation(args.device, path), args)
+
+    # replace
+    if not args.target:
+        _fail('error.replace-needs-target')
+        return 2
+    return _execute(
+        devices_module.replace_operation(args.device, args.target, path,
+                                         force=args.force), args)
+
+
+class _RawStatus:
+    """解釈せずに、そのまま見せるだけの出力。
+
+    ``btrfs replace status`` は短い進捗表示で、形も変わりうる。中途半端に
+    解釈するより原文を見せるほうが確実で、利用者も自分で確かめられる。
+    """
+
+    def __init__(self, text):
+        self.raw = text or ''
 
 
 def cmd_cockpit(args: argparse.Namespace) -> int:
@@ -955,6 +1034,25 @@ def build_parser() -> argparse.ArgumentParser:
                                 help=_('balance.option.usage'))
     _add_operation_options(balance_parser)
     balance_parser.set_defaults(func=cmd_balance)
+
+    # --- device
+    device_parser = subparsers.add_parser('device', help=_('device.command'))
+    device_parser.add_argument(
+        'action',
+        choices=('add', 'remove', 'replace', 'replace-status', 'replace-cancel'),
+        help=_('device.argument.action'))
+    device_parser.add_argument('device', nargs='?', default=None,
+                               help=_('device.argument.device'))
+    device_parser.add_argument('target', nargs='?', default=None,
+                               help=_('device.argument.target'))
+    device_parser.add_argument('--path', required=True, metavar='PATH',
+                               help=_('device.argument.path'))
+    device_parser.add_argument('--force', action='store_true',
+                               help=_('device.option.force'))
+    device_parser.add_argument('--confirm', metavar='DEVICE',
+                               help=_('device.option.confirm'))
+    _add_operation_options(device_parser)
+    device_parser.set_defaults(func=cmd_device)
 
     # --- cockpit
     cockpit_parser = subparsers.add_parser('cockpit', help=_('cockpit.command'))

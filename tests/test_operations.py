@@ -31,19 +31,49 @@ def test_unknown_risk_is_rejected():
         operations.describe(['true'], risk='probably-fine')
 
 
-def test_dangerous_operations_need_confirmation(tmp_path):
-    """**確認を取り忘れた呼び出しは通らない。** 既定で拒否する。"""
+def test_a_dangerous_operation_must_carry_a_token(tmp_path):
+    """合言葉の無い危険な操作は、そもそも作らせない。
+
+    書き忘れると「はい」だけで通ってしまうので、組み立ての時点で弾く。
+    """
+    with pytest.raises(ValueError):
+        operations.describe(['touch', str(tmp_path / 'x')],
+                            risk=operations.DANGEROUS,
+                            summary_key='operation.unknown')
+
+
+def test_dangerous_operations_need_the_exact_token(tmp_path):
+    """**対象を打たせる。** 「はい」では通らない。
+
+    危険な操作で本当に防ぎたいのは「実行する気が無かった」ことではなく、
+    **対象を取り違えたまま実行してしまう**ことである。
+    """
     marker = tmp_path / 'created'
     operation = operations.describe(
         ['touch', str(marker)], risk=operations.DANGEROUS,
-        summary_key='operation.unknown')
+        summary_key='operation.unknown', confirm_token='/dev/loop9')
 
     with pytest.raises(PermissionError):
         operations.run(operation)
+    with pytest.raises(PermissionError):
+        operations.run(operation, confirmed=True)
+    with pytest.raises(PermissionError):
+        operations.run(operation, confirmation='yes')
+    with pytest.raises(PermissionError):
+        operations.run(operation, confirmation='/dev/loop8')
     assert not marker.exists()
 
-    operations.run(operation, confirmed=True)
+    operations.run(operation, confirmation='/dev/loop9')
     assert marker.exists()
+
+
+def test_the_token_is_part_of_what_a_screen_receives():
+    """画面は「何を打たせればよいか」を知る必要がある。"""
+    operation = operations.describe(
+        ['btrfs', 'device', 'remove', '/dev/sdb', '/mnt'],
+        risk=operations.DANGEROUS, summary_key='operation.unknown',
+        confirm_token='/dev/sdb')
+    assert operation.to_dict()['confirm_token'] == '/dev/sdb'
 
 
 def test_safe_and_caution_run_without_confirmation(tmp_path):

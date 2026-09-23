@@ -299,8 +299,11 @@ run, including the `sudo` prefix, and only adds `sudo` itself when you pass `--s
 it prints and what it runs are the same string, so the confirmation cannot be about a
 different command than the one that executes.
 
-`scrub status` is the one thing here that works unprivileged, because it reads the record
-kept under `/var/lib/btrfs/`. `balance status` needs root like the rest.
+`scrub status` is attempted unprivileged and sometimes succeeds, but do not count on it:
+btrfs writes `/var/lib/btrfs/scrub.status.<uuid>` as root-only, so it reads fine until the
+first scrub has run and fails with `Permission denied` after that. It is not refused
+upfront, because the case where it works is real; when it fails you get the `sudo` command
+to retry with. `balance status` needs root outright.
 
 ### In the browser
 
@@ -312,6 +315,30 @@ not buried, and reports the scrub state.
 you; a button that always fails is worse than no button. Instead the page prints the
 command to run in a terminal, `sudo` prefix and risk included, exactly as the CLI would.
 Privileged actions belong in the Cockpit module, which has a channel for them.
+
+### Devices
+
+```shell
+btrfs-timeline device add /dev/sdd --path /mnt --sudo
+btrfs-timeline device remove /dev/sdc --path /mnt --sudo --confirm /dev/sdc
+btrfs-timeline device replace /dev/sdc /dev/sdd --path /mnt --sudo --confirm /dev/sdd
+```
+
+These can lose a pool, so they are the only operations marked **dangerous**, and
+**`--yes` is not enough for them**. You confirm by typing the device itself — the same
+idea as typing a repository name to delete it. What that guards against is not changing
+your mind; it is naming the wrong disk and not noticing.
+
+For `replace`, the name you type is the **target**: the device being overwritten. The
+source is retired and its contents are moved; the target loses everything it had. The
+thing at risk is what you should have to confirm.
+
+`add` is only **caution**, because btrfs refuses a device that already holds a filesystem
+and a typo is caught there. `--force` removes that check, and with it the operation
+becomes dangerous and asks for the name.
+
+An operation declared dangerous cannot be built without a confirmation token at all —
+forgetting one is a `ValueError`, not a quietly weaker prompt.
 
 ## Translations
 
@@ -368,8 +395,7 @@ the directory mtime, in that order.
 
 1. **File history browser, standalone web UI** — done
 2. **Cockpit module** — done: same CLI, same screen, only `transport.js` differs
-3. **Dashboard and device management** — `devices`, `scrub`, `balance` and the
-   dashboard screen are done; next is device add, remove and replace
+3. **Dashboard and device management** — done
 4. **Desktop GUI**
 
 Device management (3) can destroy a filesystem when it goes wrong, which is a different

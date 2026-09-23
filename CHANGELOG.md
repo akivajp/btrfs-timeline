@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-09-23
+
+### Added
+
+- **`device add`, `remove` and `replace`.** These can lose a pool, so they are the only
+  operations marked `dangerous`, and **`--yes` does not satisfy them**: you confirm by
+  typing the device itself. That guards against naming the wrong disk and not noticing,
+  which is the failure that actually happens.
+- For `replace`, the name to type is the **target** — the device being overwritten. The
+  source is retired and its contents move; the target loses everything. Confirming the
+  thing at risk is the only version of this that means anything.
+- `add` stays `caution`: btrfs refuses a device that already holds a filesystem, so a
+  typo is caught there. `--force` removes that check and the operation becomes dangerous.
+- A `dangerous` operation cannot be built without a confirmation token. Forgetting one is
+  a `ValueError` rather than a quietly weaker prompt.
+- `scripts/loopback-lab.sh` builds a throwaway multi-device btrfs on loop devices, and
+  `tests/test_lab.py` runs against it — really removing and re-adding a device — skipping
+  entirely when it is absent. Device operations cannot be tested on a machine you care
+  about, and they should not ship untested either.
+
+### Fixed
+
+- **`scrub status` was documented as working without root. It does not, in the case that
+  matters.** btrfs writes `/var/lib/btrfs/scrub.status.<uuid>` as root-only, so the
+  command succeeds until the first scrub has run and fails with `Permission denied`
+  afterwards. The earlier check passed only because that filesystem had never been
+  scrubbed. It is still attempted unprivileged, since the case where it works is real,
+  but a failure now suggests the `sudo` command instead of being reported as success.
+- Empty output is no longer parsed as "never scrubbed". btrfs saying `no stats available`
+  and receiving nothing at all are different things, and reporting the second as the
+  first made the screen state the opposite of the truth.
+
 ## [0.5.0] - 2026-09-23
 
 ### Added
@@ -184,6 +216,7 @@ release contains.
 - Terminal tables are padded by display width, so East Asian full-width characters line
   up.
 
+[0.6.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.6.0
 [0.5.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.5.0
 [0.4.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.4.0
 [0.3.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.3.0

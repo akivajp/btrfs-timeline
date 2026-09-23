@@ -76,7 +76,7 @@ def stats(monkeypatch):
         for devid, info in LAYOUT.items()
     ]}
 
-    def fake_run(operation, confirmed=False, timeout=None):
+    def fake_run(operation, confirmed=False, confirmation=None, timeout=None):
         return operations.Result(operation=operation, returncode=0,
                                  stdout=json.dumps(payload), stderr='')
 
@@ -153,7 +153,7 @@ def test_exclusive_operation_is_reported(sysfs, stats):
 
 def test_survives_btrfs_being_unavailable(sysfs, monkeypatch):
     """``btrfs`` が入っていなくても、画面の残りは出せる。"""
-    def explode(operation, confirmed=False, timeout=None):
+    def explode(operation, confirmed=False, confirmation=None, timeout=None):
         raise OSError('no such command')
 
     monkeypatch.setattr(operations, 'run', explode)
@@ -168,3 +168,133 @@ def test_survives_btrfs_being_unavailable(sysfs, monkeypatch):
 def test_no_btrfs_filesystems_is_not_an_error(tmp_path, monkeypatch):
     monkeypatch.setattr(devices, 'SYSFS_ROOT', str(tmp_path / 'nowhere'))
     assert devices.discover([]) == []
+
+
+# --------------------------------------------------------------------------
+# デバイスの操作 — 合言葉で守る
+# --------------------------------------------------------------------------
+
+def test_removing_a_device_is_dangerous_and_asks_for_its_name():
+    """取り外しは失敗するとプールごと失いうる。対象を打たせる。"""
+    operation = devices.remove_operation('/dev/sdb', '/mnt')
+    assert operation.argv == ['btrfs', 'device', 'remove', '/dev/sdb', '/mnt']
+    assert operation.risk == operations.DANGEROUS
+    assert operation.confirm_token == '/dev/sdb'
+
+
+def test_replace_confirms_the_device_that_gets_overwritten():
+    """**合言葉は target。** 消えるのはそちらである。
+
+    source は抜ける側で、中身は移される。target は丸ごと上書きされる。
+    打ち間違いで失われるのは target なので、確認させるのも target でなければ
+    確認の意味が無い。
+    """
+    operation = devices.replace_operation('/dev/sdb', '/dev/sdc', '/mnt')
+    assert operation.argv == ['btrfs', 'replace', 'start',
+                              '/dev/sdb', '/dev/sdc', '/mnt']
+    assert operation.risk == operations.DANGEROUS
+    assert operation.confirm_token == '/dev/sdc'
+
+
+def test_adding_a_device_is_only_caution():
+    """btrfs は既存のファイルシステムがあれば拒否する。その守りがある間は caution。"""
+    operation = devices.add_operation('/dev/sdb', '/mnt')
+    assert operation.argv == ['btrfs', 'device', 'add', '/dev/sdb', '/mnt']
+    assert operation.risk == operations.CAUTION
+    assert operation.confirm_token is None
+
+
+def test_forcing_an_add_removes_that_protection_so_it_becomes_dangerous():
+    """``-f`` は「そこにあるものを消してよい」という意味になる。"""
+    operation = devices.add_operation('/dev/sdb', '/mnt', force=True)
+    assert operation.argv == ['btrfs', 'device', 'add', '-f', '/dev/sdb', '/mnt']
+    assert operation.risk == operations.DANGEROUS
+    assert operation.confirm_token == '/dev/sdb'
+
+
+def test_replace_status_only_reads():
+    operation = devices.replace_status_operation('/mnt')
+    assert operation.risk == operations.SAFE
+    assert operation.needs_root is True
+
+
+def test_cancelling_a_replace_keeps_the_original():
+    operation = devices.replace_cancel_operation('/mnt')
+    assert operation.risk == operations.CAUTION
+
+
+# --------------------------------------------------------------------------
+# CLI — 「はい」では通らないこと
+# --------------------------------------------------------------------------
+
+@pytest.fixture
+def never_runs(monkeypatch):
+    attempted = []
+
+    def fake_run(operation, confirmed=False, confirmation=None, timeout=None):
+        attempted.append((operation, confirmation))
+        return operations.Result(operation=operation, returncode=0,
+                                 stdout='', stderr='')
+
+    monkeypatch.setattr('btrfs_timeline.cli.operations_module.run', fake_run)
+    monkeypatch.setattr('btrfs_timeline.cli.os.geteuid', lambda: 0)
+    monkeypatch.setattr('btrfs_timeline.cli.sys.stdin.isatty', lambda: False)
+    return attempted
+
+
+def test_yes_is_not_enough_for_a_dangerous_operation(never_runs, capsys):
+    """**ここが今回の要点。** --yes で危険な操作が通ってはいけない。"""
+    from btrfs_timeline import cli
+
+    assert cli.main(['device', 'remove', '/dev/sdb', '--path', '/mnt', '--yes']) == 1
+    assert never_runs == []
+    assert '/dev/sdb' in capsys.readouterr().err
+
+
+def test_the_wrong_name_runs_nothing(never_runs, capsys):
+    from btrfs_timeline import cli
+
+    assert cli.main(['device', 'remove', '/dev/sdb', '--path', '/mnt',
+                     '--confirm', '/dev/sdc']) == 1
+    assert never_runs == []
+
+
+def test_the_exact_name_lets_it_through(never_runs):
+    from btrfs_timeline import cli
+
+    assert cli.main(['device', 'remove', '/dev/sdb', '--path', '/mnt',
+                     '--confirm', '/dev/sdb']) == 0
+    operation, confirmation = never_runs[0]
+    assert operation.argv == ['btrfs', 'device', 'remove', '/dev/sdb', '/mnt']
+    # 合言葉は実行側にも渡る。確認したことが呼び出しの中で完結しない
+    assert confirmation == '/dev/sdb'
+
+
+def test_replace_asks_for_the_target_not_the_source(never_runs, capsys):
+    from btrfs_timeline import cli
+
+    # source を答えても通らない
+    assert cli.main(['device', 'replace', '/dev/sdb', '/dev/sdc', '--path', '/mnt',
+                     '--confirm', '/dev/sdb']) == 1
+    assert never_runs == []
+
+    assert cli.main(['device', 'replace', '/dev/sdb', '/dev/sdc', '--path', '/mnt',
+                     '--confirm', '/dev/sdc']) == 0
+    assert never_runs[0][1] == '/dev/sdc'
+
+
+def test_a_typed_answer_is_accepted_interactively(never_runs, monkeypatch):
+    from btrfs_timeline import cli
+
+    monkeypatch.setattr('btrfs_timeline.cli.sys.stdin.isatty', lambda: True)
+    monkeypatch.setattr('builtins.input', lambda prompt='': '/dev/sdb')
+    assert cli.main(['device', 'remove', '/dev/sdb', '--path', '/mnt']) == 0
+    assert len(never_runs) == 1
+
+
+def test_adding_still_only_needs_yes(never_runs):
+    """危険でないものにまで合言葉を求めると、合言葉が軽く見られる。"""
+    from btrfs_timeline import cli
+
+    assert cli.main(['device', 'add', '/dev/sdb', '--path', '/mnt', '--yes']) == 0
+    assert never_runs[0][1] is None

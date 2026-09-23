@@ -304,3 +304,83 @@ def _device_names(base: str) -> set:
         return set(os.listdir(os.path.join(base, 'devices')))
     except OSError:
         return set()
+
+
+# ---------------------------------------------------------------------------
+# デバイスの操作 — ここだけ危険度が跳ね上がる
+# ---------------------------------------------------------------------------
+#
+# 失敗するとプールごと失いうるのはこの 3 つだけで、それ以外の操作とは扱いを変える。
+# 合言葉として **失われる側のデバイス名** を要求する。「はい」を押させるだけでは
+# 「実行する気が無かった」しか防げず、**対象を取り違えたまま実行する** のを防げない。
+# 後者のほうが、実際に起きるし、起きたときの被害が大きい。
+
+def add_operation(device: str, path: str, force: bool = False) -> operations.Operation:
+    """デバイスを 1 台加える。
+
+    btrfs は、対象に既存のファイルシステムがあれば ``-f`` 無しでは拒否する。
+    その守りがある限り打ち間違いは弾かれるので ``CAUTION`` に留める。
+    ``force`` を付けるとその守りを外すことになるため、危険度が上がる。
+    """
+    argv = ['btrfs', 'device', 'add']
+    if force:
+        argv.append('-f')
+    argv.extend([device, path])
+    return operations.describe(
+        argv,
+        risk=operations.DANGEROUS if force else operations.CAUTION,
+        needs_root=True,
+        summary_key='operation.device-add-force' if force else 'operation.device-add',
+        confirm_token=device if force else None,
+        device=device, path=path)
+
+
+def remove_operation(device: str, path: str) -> operations.Operation:
+    """デバイスを 1 台外す。
+
+    外す前に、そのデバイスが持っていたチャンクを他へ書き移す。空きが足りなければ
+    途中で失敗し、その最中に別のデバイスが落ちればプールごと失う。
+    **冗長性も下がる** (raid1 が 2 台なら single になる)。
+    """
+    return operations.describe(
+        ['btrfs', 'device', 'remove', device, path],
+        risk=operations.DANGEROUS, needs_root=True,
+        summary_key='operation.device-remove',
+        confirm_token=device,
+        device=device, path=path)
+
+
+def replace_operation(source: str, target: str, path: str,
+                      force: bool = False) -> operations.Operation:
+    """デバイスを置き換える。
+
+    合言葉に使うのは **``target``** である。``source`` はこれから抜ける側で、
+    失われるのは ``target`` に今あるもの — 置換は対象を丸ごと上書きする。
+    打ち間違いで消えるのはそちらなので、確認させるのもそちらでなければならない。
+    """
+    argv = ['btrfs', 'replace', 'start']
+    if force:
+        argv.append('-f')
+    # -B を付けず、既定どおり背景で走らせる。進捗は replace status で追える
+    argv.extend([source, target, path])
+    return operations.describe(
+        argv, risk=operations.DANGEROUS, needs_root=True,
+        summary_key='operation.device-replace',
+        confirm_token=target,
+        source=source, target=target, path=path)
+
+
+def replace_status_operation(path: str) -> operations.Operation:
+    """置換の進捗を見る。"""
+    return operations.describe(
+        ['btrfs', 'replace', 'status', path],
+        risk=operations.SAFE, needs_root=True,
+        summary_key='operation.device-replace-status', path=path)
+
+
+def replace_cancel_operation(path: str) -> operations.Operation:
+    """走っている置換を止める。元のデバイスはそのまま残る。"""
+    return operations.describe(
+        ['btrfs', 'replace', 'cancel', path],
+        risk=operations.CAUTION, needs_root=True,
+        summary_key='operation.device-replace-cancel', path=path)

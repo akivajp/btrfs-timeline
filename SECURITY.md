@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---|---|
-| 0.5.x | Yes |
+| 0.6.x | Yes |
+| 0.5.x | No — upgrade |
 | 0.4.x | No — upgrade |
 | 0.3.x | No — upgrade |
 | 0.2.x | No — upgrade |
@@ -47,6 +48,10 @@ Design assumptions:
   cannot make the tool report — or restore — live content as if it were old.
 - File names and contents are rendered as text by the browser front-end (`textContent`,
   never `innerHTML`), so a crafted file name is not markup.
+- **Operations that can lose data require the target to be named, not merely agreed to.**
+  A confirmation of "yes" does not distinguish "I meant to do this" from "I meant to do
+  this to a different disk"; typing the device does. The check lives in the runner, and
+  an operation declared dangerous cannot be constructed without a token.
 - **Privilege is never escalated silently.** Operations that need root say so and stop;
   `sudo` is added only when the caller asks for it, and the command that is displayed is
   the command that runs, so a confirmation always refers to what will actually execute.
