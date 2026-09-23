@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-23
+
+### Added
+
+- **`devices`** — what each filesystem is made of, the profile of every allocation kind,
+  whether a device is missing, whether an exclusive operation is running, and the
+  per-device error counters. `--json` as usual.
+- **It needs no root.** `btrfs filesystem show` does — it opens the raw block devices —
+  so it is not used. The same information comes from `/sys/fs/btrfs/` plus
+  `btrfs device stats --format json`, both readable by an ordinary user.
+- **Commands are disclosed with their risk.** Every command run on the user's behalf is
+  reported, in the terminal and in the JSON, together with a declared risk level: `safe`
+  changes nothing, `caution` changes state but can be interrupted or undone, `dangerous`
+  can lose data. A `dangerous` operation **cannot be executed until it is confirmed** —
+  the refusal lives in the runner, not in each caller, so a call site cannot forget it.
+
+### Notes
+
+- `devid` is taken from `btrfs device stats`, not from the order of
+  `/sys/fs/btrfs/<uuid>/devices/`. That directory is sorted by name, and on the author's
+  machine `devid=1` is the *fourth* name — matching by order silently attributes every
+  device's error counters to the wrong disk. A test fixes a layout where the two orders
+  disagree.
+
 ## [0.2.1] - 2026-09-23
 
 ### Fixed
@@ -113,6 +137,7 @@ release contains.
 - Terminal tables are padded by display width, so East Asian full-width characters line
   up.
 
+[0.3.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.3.0
 [0.2.1]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.2.1
 [0.2.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.2.0
 [0.1.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.1.0

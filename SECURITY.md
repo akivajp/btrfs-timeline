@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---|---|
-| 0.2.x | Yes |
+| 0.3.x | Yes |
+| 0.2.x | No — upgrade |
 | 0.1.x | No — upgrade |
 
 ## Reporting a vulnerability
@@ -44,3 +45,7 @@ Design assumptions:
   cannot make the tool report — or restore — live content as if it were old.
 - File names and contents are rendered as text by the browser front-end (`textContent`,
   never `innerHTML`), so a crafted file name is not markup.
+- **External commands are never run through a shell.** They are argument vectors passed
+  to `subprocess` directly, so a path containing shell metacharacters is an argument and
+  nothing else. Commands that can lose data declare themselves as such and are refused
+  by the runner until a caller confirms them explicitly.

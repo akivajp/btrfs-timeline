@@ -239,6 +239,34 @@ Because `cockpit.spawn` does not inherit your shell's `PATH`, `install` records 
 absolute path of the installation you ran it from. Run it again after you change how
 `btrfs-timeline` itself is installed.
 
+## Devices
+
+```shell
+btrfs-timeline devices
+btrfs-timeline devices --json
+```
+
+What each filesystem is made of, which profile every kind of allocation uses, whether a
+device is missing, whether something is running, and the per-device error counters — the
+numbers that tell you a disk, a cable or a power supply is on its way out.
+
+**This does not need root.** It deliberately avoids `btrfs filesystem show`, which does:
+that command opens the raw block devices and fails with `Permission denied` for anyone
+else. Everything here comes from `/sys/fs/btrfs/` and `btrfs device stats --format json`,
+both readable as an ordinary user — the same reason browsing history needs no privileges.
+
+Every command run on your behalf is printed with its result and how risky it was:
+
+```
+  ran: btrfs --format json device stats /  [safe]
+```
+
+That disclosure is not decoration. Operations declare their risk — **safe** changes
+nothing, **caution** changes state but can be interrupted or undone, **dangerous** can
+lose data — and anything dangerous cannot run at all until it has been confirmed. The
+write operations land on this: scrub and balance next, then device add, remove and
+replace.
+
 ## Translations
 
 Messages are translated at runtime from JSON catalogs in
@@ -294,8 +322,8 @@ the directory mtime, in that order.
 
 1. **File history browser, standalone web UI** — done
 2. **Cockpit module** — done: same CLI, same screen, only `transport.js` differs
-3. **Dashboard and device management** — the current focus: devices, RAID profile,
-   scrub/balance progress
+3. **Dashboard and device management** — read-only part done (`devices`); next is
+   scrub and balance, then device add/remove/replace, each behind its stated risk
 4. **Desktop GUI**
 
 Device management (3) can destroy a filesystem when it goes wrong, which is a different
@@ -319,6 +347,9 @@ privileges.
   finding something deleted; use the file's own history for edits.
 - A restored file keeps the original's permissions and mtime, but not its owner:
   `chown` requires root, and this tool is meant to run unprivileged.
+- `devices` does not show how much of each device btrfs has allocated. That needs the
+  chunk information, which is the one thing here that does require root, and it is not
+  worth asking for it to fill in a column.
 - btrfs RAID 5/6 is still not considered production-ready upstream; this tool does not
   change that.
 

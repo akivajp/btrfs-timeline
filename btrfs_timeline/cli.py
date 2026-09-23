@@ -27,9 +27,11 @@ from typing import Any, Optional
 
 from . import __version__, i18n
 from .core import browse as browse_module
+from .core import devices as devices_module
 from .core import diff as diff_module
 from .core import history as history_module
 from .core import mounts as mounts_module
+from .core import operations as operations_module
 from .core import restore as restore_module
 from .core import snapshots as snapshots_module
 
@@ -491,6 +493,114 @@ def cmd_preview(args: argparse.Namespace) -> int:
     return 0
 
 
+def _risk_label(risk: str) -> str:
+    """危険度の表示名。
+
+    キーを文字列の連結で作らないのは、カタログに載っているかを機械的に
+    検査できるようにするため (連結すると検査をすり抜ける)。
+    """
+    return _({
+        operations_module.SAFE: 'risk.safe',
+        operations_module.CAUTION: 'risk.caution',
+        operations_module.DANGEROUS: 'risk.dangerous',
+    }.get(risk, 'risk.safe'))
+
+
+def _device_to_dict(device) -> dict:
+    """``Device`` を JSON 化できる辞書にする (CLI の公開契約)。"""
+    return {
+        'devid': device.devid, 'name': device.name, 'path': device.path,
+        'size': device.size, 'missing': device.missing,
+        'writeable': device.writeable, 'replace_target': device.replace_target,
+        'errors': device.errors, 'has_errors': device.has_errors,
+    }
+
+
+def filesystem_to_dict(filesystem) -> dict:
+    """``Filesystem`` を JSON 化できる辞書にする (CLI の公開契約)。
+
+    ``command`` には **実際に実行したコマンド** とその危険度が入る。
+    裏で何が動いたのかを画面が隠さずに済むようにするためで、
+    ここから先の「変更を伴う操作」でも同じ形を使う。
+    """
+    return {
+        'uuid': filesystem.uuid,
+        'label': filesystem.label,
+        'mount_points': list(filesystem.mount_points),
+        'degraded': filesystem.degraded,
+        'exclusive_operation': filesystem.exclusive_operation,
+        'command': (filesystem.stats_command.to_dict()
+                    if filesystem.stats_command else None),
+        'devices': [_device_to_dict(d) for d in filesystem.devices],
+        'allocations': [{
+            'kind': a.kind, 'profile': a.profile,
+            'total_bytes': a.total_bytes, 'used_bytes': a.used_bytes,
+        } for a in filesystem.allocations],
+    }
+
+
+def cmd_devices(args: argparse.Namespace) -> int:
+    """ファイルシステムとデバイスの状態を表示する。
+
+    ``btrfs filesystem show`` は使わない (root を要求するため)。sysfs と
+    ``btrfs device stats`` だけで、非特権のまま同じことを見る。
+    """
+    found = devices_module.discover()
+
+    if args.json:
+        _emit_json({'filesystems': [filesystem_to_dict(f) for f in found]})
+        return 0
+
+    if not found:
+        print(_('devices.empty'))
+        return 0
+
+    for filesystem in found:
+        title = filesystem.label or filesystem.uuid
+        print(title)
+        print(_('devices.mounted', paths=' '.join(filesystem.mount_points) or '-'))
+        print(_('devices.state',
+                state=_('devices.state.degraded' if filesystem.degraded
+                        else 'devices.state.ok'),
+                operation=filesystem.exclusive_operation or '-'))
+        if filesystem.stats_command:
+            # 裏で動いたコマンドは隠さない
+            print(_('devices.command-run',
+                    command=filesystem.stats_command.display(),
+                    risk=_risk_label(filesystem.stats_command.risk)))
+        print()
+        print(_row([_('devices.column.devid'), _('devices.column.device'),
+                    _('devices.column.size'), _('devices.column.state'),
+                    _('devices.column.errors')],
+                   columns=((5, '>'), (20, '<'), (10, '>'), (10, '<'))))
+        for device in filesystem.devices:
+            if device.missing:
+                state = _('devices.device.missing')
+            elif not device.writeable:
+                state = _('devices.device.readonly')
+            elif device.replace_target:
+                state = _('devices.device.replacing')
+            else:
+                state = _('devices.device.ok')
+            errors = ' '.join(
+                '{0}={1}'.format(name, value)
+                for name, value in device.errors.items() if value) or '-'
+            print(_row([device.devid, device.path or '-', _human_size(device.size),
+                        state, errors],
+                       columns=((5, '>'), (20, '<'), (10, '>'), (10, '<'))))
+        print()
+        print('  ' + _row([_('devices.column.allocation'), _('devices.column.profile'),
+                           _('devices.column.total'), _('devices.column.used')],
+                          columns=((10, '<'), (12, '<'), (12, '>'))))
+        for allocation in filesystem.allocations:
+            print('  ' + _row([allocation.kind, allocation.profile or '-',
+                               _human_size(allocation.total_bytes),
+                               _human_size(allocation.used_bytes)],
+                              columns=((10, '<'), (12, '<'), (12, '>'))))
+        print()
+    return 0
+
+
 def cmd_cockpit(args: argparse.Namespace) -> int:
     """Cockpit モジュールを設置する / 取り除く。
 
@@ -659,6 +769,12 @@ def build_parser() -> argparse.ArgumentParser:
     config_parser.add_argument('--json', action='store_true', help=_('cli.option.json'))
     _add_language_option(config_parser)
     config_parser.set_defaults(func=cmd_config)
+
+    # --- devices
+    devices_parser = subparsers.add_parser('devices', help=_('devices.command'))
+    devices_parser.add_argument('--json', action='store_true', help=_('cli.option.json'))
+    _add_language_option(devices_parser)
+    devices_parser.set_defaults(func=cmd_devices)
 
     # --- cockpit
     cockpit_parser = subparsers.add_parser('cockpit', help=_('cockpit.command'))

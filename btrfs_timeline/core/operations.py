@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""外部コマンドの実行と、その危険度の申告。
+
+このツールはここから先、利用者のファイルシステムを **変更しうる** コマンドを
+扱うようになる。そこで守る約束を 3 つ置く。
+
+1. **何を実行するかを必ず示す。** 画面の裏で動くコマンドは隠さない。
+   利用者が自分で確かめられるし、後から手作業で追いかけることもできる。
+2. **危険度を申告する。** 「何も変えない」「変えるが戻せる」「失敗すると失う」は
+   まったく別物で、同じ見た目のボタンに並べてはいけない。
+3. **危険なものには念を押す。** ``DANGEROUS`` の操作は、呼び出し側が明示的に
+   確認を取るまで実行できない。うっかり押せる場所に置かない。
+
+この 3 つを個々の呼び出し箇所の良心に任せると、必ずどこかで漏れる。
+``Operation`` を通さないと実行できない形にしてある。
+"""
+
+from __future__ import annotations
+
+import subprocess
+from typing import List, NamedTuple, Optional
+
+from .. import i18n
+
+#: 何も変更しない。読むだけ。
+SAFE = 'safe'
+
+#: 状態を変えるが、中断できる・やり直せる。scrub や balance の開始など。
+CAUTION = 'caution'
+
+#: 失敗するとデータやファイルシステムそのものを失いうる。
+#: デバイスの取り外しや置換など。**必ず確認を取ってから実行する。**
+DANGEROUS = 'dangerous'
+
+RISKS = (SAFE, CAUTION, DANGEROUS)
+
+
+class Operation(NamedTuple):
+    """実行しようとしている 1 つのコマンド。
+
+    実行前にそのまま画面に出せる形にしてある。「裏で何が起きるのか」を
+    利用者が知らないまま進む状況を作らないための型である。
+    """
+
+    argv: List[str]
+    """実際に実行するコマンド。シェルは通さない"""
+
+    risk: str
+    """``SAFE`` / ``CAUTION`` / ``DANGEROUS``"""
+
+    needs_root: bool
+    """root 権限を必要とするか"""
+
+    summary_key: str
+    """この操作が何をするかを説明する翻訳キー"""
+
+    params: dict
+    """``summary_key`` に埋めるパラメータ"""
+
+    def display(self) -> str:
+        """画面や端末にそのまま出せるコマンド文字列。
+
+        **これをシェルに渡して実行してはいけない。** 表示専用である
+        (実行は ``argv`` をそのまま ``subprocess`` に渡す)。
+        """
+        return ' '.join(_quote(part) for part in self.argv)
+
+    def summary(self) -> str:
+        """何をする操作かの一文。"""
+        return i18n.translate(self.summary_key, **self.params)
+
+    def to_dict(self) -> dict:
+        """JSON 化できる辞書にする (CLI の公開契約)。"""
+        return {
+            'argv': list(self.argv),
+            'command': self.display(),
+            'risk': self.risk,
+            'needs_root': self.needs_root,
+            'summary': self.summary(),
+        }
+
+
+class Result(NamedTuple):
+    """実行結果。"""
+
+    operation: Operation
+    returncode: int
+    stdout: str
+    stderr: str
+
+    @property
+    def ok(self) -> bool:
+        return self.returncode == 0
+
+
+def _quote(part: str) -> str:
+    """表示用に、空白などを含む引数を括る。"""
+    if part and all(ch.isalnum() or ch in '-_=/.:,@+' for ch in part):
+        return part
+    return "'{0}'".format(part.replace("'", "'\\''"))
+
+
+def describe(argv, risk: str = SAFE, needs_root: bool = False,
+             summary_key: str = 'operation.unknown', **params) -> Operation:
+    """実行せずに ``Operation`` を組み立てる。
+
+    画面は「これから何を実行するか」をこの形で受け取り、確認を取ってから
+    実行に進む。``--dry-run`` 相当の表示もこれで賄える。
+    """
+    if risk not in RISKS:
+        raise ValueError('unknown risk level: {0}'.format(risk))
+    return Operation(argv=list(argv), risk=risk, needs_root=needs_root,
+                     summary_key=summary_key, params=params)
+
+
+def run(operation: Operation, confirmed: bool = False,
+        timeout: Optional[float] = None) -> Result:
+    """コマンドを実行する。
+
+    Args:
+        operation: 実行する操作。
+        confirmed: ``DANGEROUS`` の操作では、これが True でなければ実行しない。
+            **既定で False なのは意図的である。** 確認を取り忘れた呼び出しは
+            通らないようにしてある。
+        timeout: 秒。超えると ``subprocess.TimeoutExpired``。
+
+    Raises:
+        PermissionError: 危険な操作を、確認なしで実行しようとした。
+    """
+    if operation.risk == DANGEROUS and not confirmed:
+        raise PermissionError(i18n.translate(
+            'error.confirmation-required', command=operation.display()))
+
+    completed = subprocess.run(
+        operation.argv, capture_output=True, text=True, timeout=timeout)
+    return Result(operation=operation, returncode=completed.returncode,
+                  stdout=completed.stdout, stderr=completed.stderr)
