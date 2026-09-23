@@ -70,6 +70,16 @@ class Operation(NamedTuple):
         """何をする操作かの一文。"""
         return i18n.translate(self.summary_key, **self.params)
 
+    def with_sudo(self) -> 'Operation':
+        """``sudo`` 経由で実行する形にした写しを返す。
+
+        argv と表示が同時に変わるので、**見せたものと実行するものが食い違う**
+        状態が作れない。権限昇格は勝手に行わず、呼び出し側が明示したときだけ。
+        """
+        if self.argv and self.argv[0] == 'sudo':
+            return self
+        return self._replace(argv=['sudo'] + list(self.argv))
+
     def to_dict(self) -> dict:
         """JSON 化できる辞書にする (CLI の公開契約)。"""
         return {

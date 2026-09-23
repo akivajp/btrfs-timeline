@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---|---|
-| 0.3.x | Yes |
+| 0.4.x | Yes |
+| 0.3.x | No — upgrade |
 | 0.2.x | No — upgrade |
 | 0.1.x | No — upgrade |
 
@@ -45,6 +46,9 @@ Design assumptions:
   cannot make the tool report — or restore — live content as if it were old.
 - File names and contents are rendered as text by the browser front-end (`textContent`,
   never `innerHTML`), so a crafted file name is not markup.
+- **Privilege is never escalated silently.** Operations that need root say so and stop;
+  `sudo` is added only when the caller asks for it, and the command that is displayed is
+  the command that runs, so a confirmation always refers to what will actually execute.
 - **External commands are never run through a shell.** They are argument vectors passed
   to `subprocess` directly, so a path containing shell metacharacters is an argument and
   nothing else. Commands that can lose data declare themselves as such and are refused

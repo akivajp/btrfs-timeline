@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-23
+
+### Added
+
+- **`scrub`** and **`balance`** — status, start, cancel, resume, and pause for balance.
+  `balance start --usage N` rewrites only the chunks less than N%% full, which is the
+  usual answer to fragmented free space and far lighter than a full balance. Both apply
+  the filter to data and metadata, since `-dusage` alone leaves metadata behind.
+- The disclosure from 0.3.0 now guards real writes. Before anything that changes state,
+  the exact command and its declared risk are printed and a confirmation is asked for.
+  Only `safe` operations skip the question, so the question keeps its meaning.
+- **With no terminal to ask at, it refuses rather than assuming yes.** `--yes` is how you
+  say yes in a script.
+- **It does not quietly escalate.** When an operation needs root, it prints the exact
+  command to run including the `sudo` prefix and stops; `--sudo` is how you ask it to add
+  that itself. What it prints and what it runs are the same string, so a confirmation
+  cannot be about a different command than the one that executes.
+- `scrub status` parses `-R --raw` output — `--format json` does not cover it — and keeps
+  the original text alongside the parsed fields, so nothing is hidden behind a possibly
+  imperfect parser.
+
+### Notes
+
+- `corrected_errors` and `uncorrectable_errors` are not the same thing and are not
+  reported as one. The first means a bad block was found and rebuilt from another copy;
+  the second means it could not be, and that data is gone. Only the second is flagged.
+
 ## [0.3.0] - 2026-09-23
 
 ### Added
@@ -137,6 +164,7 @@ release contains.
 - Terminal tables are padded by display width, so East Asian full-width characters line
   up.
 
+[0.4.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.4.0
 [0.3.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.3.0
 [0.2.1]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.2.1
 [0.2.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.2.0

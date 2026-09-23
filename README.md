@@ -267,6 +267,41 @@ lose data — and anything dangerous cannot run at all until it has been confirm
 write operations land on this: scrub and balance next, then device add, remove and
 replace.
 
+## Maintenance
+
+```shell
+btrfs-timeline scrub status /home
+btrfs-timeline scrub start /home --sudo
+btrfs-timeline balance start /home --usage 20 --sudo
+```
+
+Scrub reads every block, checks it against its checksum, and repairs what it can from
+another copy. Balance rewrites chunks to even allocation out across devices; `--usage 20`
+only touches chunks less than 20% full, which is the usual answer to fragmented free
+space and is far lighter than a full balance.
+
+**Nothing runs without showing you what it is and asking first:**
+
+```
+$ btrfs-timeline scrub start /home
+about to run: btrfs scrub start /home
+  risk: changes state - read every block of /home and repair what has a good copy elsewhere
+run it? [y/N]
+```
+
+Operations declare a risk — **safe** changes nothing, **caution** changes state but can be
+interrupted or resumed, **dangerous** can lose data — and only safe ones skip the
+question. With no terminal to ask at, it refuses rather than assuming yes; pass `--yes`
+when you mean it.
+
+These need root, and **it will not quietly escalate**. It tells you the exact command to
+run, including the `sudo` prefix, and only adds `sudo` itself when you pass `--sudo`. What
+it prints and what it runs are the same string, so the confirmation cannot be about a
+different command than the one that executes.
+
+`scrub status` is the one thing here that works unprivileged, because it reads the record
+kept under `/var/lib/btrfs/`. `balance status` needs root like the rest.
+
 ## Translations
 
 Messages are translated at runtime from JSON catalogs in
@@ -322,8 +357,8 @@ the directory mtime, in that order.
 
 1. **File history browser, standalone web UI** — done
 2. **Cockpit module** — done: same CLI, same screen, only `transport.js` differs
-3. **Dashboard and device management** — read-only part done (`devices`); next is
-   scrub and balance, then device add/remove/replace, each behind its stated risk
+3. **Dashboard and device management** — `devices`, `scrub` and `balance` are done;
+   next is device add/remove/replace, and a dashboard screen in the browser
 4. **Desktop GUI**
 
 Device management (3) can destroy a filesystem when it goes wrong, which is a different

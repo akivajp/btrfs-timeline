@@ -30,6 +30,7 @@ from .core import browse as browse_module
 from .core import devices as devices_module
 from .core import diff as diff_module
 from .core import history as history_module
+from .core import maintenance as maintenance_module
 from .core import mounts as mounts_module
 from .core import operations as operations_module
 from .core import restore as restore_module
@@ -97,7 +98,12 @@ def _local(value: Optional[datetime.datetime]) -> str:
 
 
 def _fail(key: str, **params) -> None:
-    """エラーメッセージを標準エラー出力に書く。"""
+    """エラーメッセージを標準エラー出力に書く。
+
+    先に標準出力を掃き出すのは、リダイレクトされたときに順序が入れ替わるのを
+    防ぐため。「何を実行しようとしたか」の後に理由が来ないと読めない。
+    """
+    sys.stdout.flush()
     print(_('error.prefix', message=_(key, **params)), file=sys.stderr)
 
 
@@ -506,6 +512,151 @@ def _risk_label(risk: str) -> str:
     }.get(risk, 'risk.safe'))
 
 
+def _prepare(operation, use_sudo: bool):
+    """実行前に、権限の都合で形を整える。
+
+    root が要るのに root でない場合、**黙って sudo を付けたりはしない**。
+    何が必要かを伝えて止まり、``--sudo`` を明示されたときだけ付ける。
+    """
+    if operation.needs_root and os.geteuid() != 0:
+        if not use_sudo:
+            return None
+        return operation.with_sudo()
+    return operation
+
+
+def _confirm(operation, assume_yes: bool) -> bool:
+    """実行してよいかを確かめる。
+
+    **何を実行するのかを必ず先に見せる。** 安全な操作は尋ねないが、
+    それ以外は尋ねる。端末でない (スクリプトから呼ばれた) 場合は、
+    黙って進めずに断る — 確認を求められない場所で確認を省いてはいけない。
+    """
+    print(_('operation.about-to-run', command=operation.display()))
+    print(_('operation.risk-line', risk=_risk_label(operation.risk),
+            summary=operation.summary()))
+    if operation.risk == operations_module.SAFE:
+        return True
+    if assume_yes:
+        return True
+    if not sys.stdin.isatty():
+        _fail('error.needs-yes')
+        return False
+    try:
+        answer = input(_('operation.confirm-prompt'))
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+    return answer.strip().lower() in ('y', 'yes')
+
+
+def _execute(operation, args) -> int:
+    """確認を取ってから実行し、終了コードを返す。"""
+    prepared = _prepare(operation, getattr(args, 'sudo', False))
+    if prepared is None:
+        _fail('error.needs-root', command=operation.with_sudo().display())
+        return 1
+    if not _confirm(prepared, getattr(args, 'yes', False)):
+        print(_('operation.cancelled'))
+        return 1
+
+    try:
+        result = operations_module.run(prepared)
+    except OSError as error:
+        print(_('error.prefix', message=error), file=sys.stderr)
+        return 1
+
+    if result.stdout.strip():
+        print(result.stdout.rstrip())
+    if not result.ok:
+        print(result.stderr.rstrip(), file=sys.stderr)
+    return 0 if result.ok else 1
+
+
+def _read_status(operation, args, parse, to_dict) -> int:
+    """状態を読むだけの操作。確認は要らないが、コマンドは示す。"""
+    prepared = _prepare(operation, getattr(args, 'sudo', False))
+    if prepared is None:
+        _fail('error.needs-root', command=operation.with_sudo().display())
+        return 1
+    try:
+        result = operations_module.run(prepared)
+    except OSError as error:
+        print(_('error.prefix', message=error), file=sys.stderr)
+        return 1
+
+    status = parse(result.stdout)
+    if args.json:
+        payload = to_dict(status)
+        payload['command'] = prepared.to_dict()
+        payload['ok'] = result.ok
+        if not result.ok:
+            payload['error'] = result.stderr.strip()
+        _emit_json(payload)
+        return 0 if result.ok else 1
+
+    print(_('operation.ran', command=prepared.display(),
+            risk=_risk_label(prepared.risk)))
+    if not result.ok:
+        print(result.stderr.rstrip(), file=sys.stderr)
+        return 1
+    print(status.raw.rstrip())
+    return 0
+
+
+def _scrub_to_dict(status) -> dict:
+    return {
+        'state': status.state, 'running': status.running,
+        'total_bytes': status.total_bytes, 'scrubbed_bytes': status.scrubbed_bytes,
+        'percent': status.percent, 'duration': status.duration,
+        'time_left': status.time_left, 'eta': status.eta,
+        'error_summary': status.error_summary, 'has_errors': status.has_errors,
+        'counters': status.counters, 'raw': status.raw,
+    }
+
+
+def _balance_to_dict(status) -> dict:
+    return {
+        'state': status.state, 'running': status.running,
+        'balanced': status.balanced, 'total': status.total,
+        'considered': status.considered, 'percent_left': status.percent_left,
+        'raw': status.raw,
+    }
+
+
+def cmd_scrub(args: argparse.Namespace) -> int:
+    """scrub を開始・停止・再開する、あるいは状態を見る。"""
+    path = os.path.abspath(args.path)
+    if args.action == 'status':
+        return _read_status(maintenance_module.scrub_status_operation(path), args,
+                            maintenance_module.parse_scrub_status, _scrub_to_dict)
+
+    builder = {
+        'start': lambda: maintenance_module.scrub_start_operation(
+            path, readonly=args.readonly),
+        'cancel': lambda: maintenance_module.scrub_cancel_operation(path),
+        'resume': lambda: maintenance_module.scrub_resume_operation(path),
+    }[args.action]
+    return _execute(builder(), args)
+
+
+def cmd_balance(args: argparse.Namespace) -> int:
+    """balance を開始・停止・再開する、あるいは状態を見る。"""
+    path = os.path.abspath(args.path)
+    if args.action == 'status':
+        return _read_status(maintenance_module.balance_status_operation(path), args,
+                            maintenance_module.parse_balance_status, _balance_to_dict)
+
+    builder = {
+        'start': lambda: maintenance_module.balance_start_operation(
+            path, usage=args.usage),
+        'cancel': lambda: maintenance_module.balance_cancel_operation(path),
+        'pause': lambda: maintenance_module.balance_pause_operation(path),
+        'resume': lambda: maintenance_module.balance_resume_operation(path),
+    }[args.action]
+    return _execute(builder(), args)
+
+
 def _device_to_dict(device) -> dict:
     """``Device`` を JSON 化できる辞書にする (CLI の公開契約)。"""
     return {
@@ -664,6 +815,14 @@ def cmd_mounts(args: argparse.Namespace) -> int:
     return 0
 
 
+def _add_operation_options(parser: argparse.ArgumentParser) -> None:
+    """状態を変える操作に共通の option。"""
+    parser.add_argument('--yes', '-y', action='store_true', help=_('cli.option.yes'))
+    parser.add_argument('--sudo', action='store_true', help=_('cli.option.sudo'))
+    parser.add_argument('--json', action='store_true', help=_('cli.option.json'))
+    _add_language_option(parser)
+
+
 def _add_language_option(parser: argparse.ArgumentParser) -> None:
     """``--lang`` を追加する。
 
@@ -775,6 +934,27 @@ def build_parser() -> argparse.ArgumentParser:
     devices_parser.add_argument('--json', action='store_true', help=_('cli.option.json'))
     _add_language_option(devices_parser)
     devices_parser.set_defaults(func=cmd_devices)
+
+    # --- scrub
+    scrub_parser = subparsers.add_parser('scrub', help=_('scrub.command'))
+    scrub_parser.add_argument('action', choices=('status', 'start', 'cancel', 'resume'),
+                              help=_('scrub.argument.action'))
+    scrub_parser.add_argument('path', help=_('scrub.argument.path'))
+    scrub_parser.add_argument('--readonly', action='store_true',
+                              help=_('scrub.option.readonly'))
+    _add_operation_options(scrub_parser)
+    scrub_parser.set_defaults(func=cmd_scrub)
+
+    # --- balance
+    balance_parser = subparsers.add_parser('balance', help=_('balance.command'))
+    balance_parser.add_argument(
+        'action', choices=('status', 'start', 'cancel', 'pause', 'resume'),
+        help=_('balance.argument.action'))
+    balance_parser.add_argument('path', help=_('balance.argument.path'))
+    balance_parser.add_argument('--usage', type=int, metavar='N',
+                                help=_('balance.option.usage'))
+    _add_operation_options(balance_parser)
+    balance_parser.set_defaults(func=cmd_balance)
 
     # --- cockpit
     cockpit_parser = subparsers.add_parser('cockpit', help=_('cockpit.command'))
