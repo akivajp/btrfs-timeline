@@ -123,3 +123,57 @@ def test_cli_installs_and_removes(target, capsys):
 
     assert cli.main(['cockpit', 'uninstall']) == 0
     assert not os.path.exists(target)
+
+
+# --------------------------------------------------------------------------
+# メニューに出る名前の翻訳
+# --------------------------------------------------------------------------
+
+def test_manifest_label_matches_the_english_catalog(target):
+    """``manifest.json`` の label は、訳を引くときのキーそのものである。
+
+    Cockpit は原文をキーにして ``po.manifest.<言語>.js`` から訳を探すので、
+    ここがカタログとずれると、訳があるのに引かれないという状態になる。
+    """
+    from btrfs_timeline import i18n
+
+    directory = cockpit.install()
+    with open(os.path.join(directory, 'manifest.json'), encoding='utf-8') as handle:
+        label = json.load(handle)['tools']['index']['label']
+    assert label == i18n.load_catalog('en')[cockpit.MENU_LABEL_KEY]
+
+
+def test_menu_label_is_translated_from_the_same_catalog(target):
+    """翻訳を追加した人が、メニュー名だけ別の場所で訳し直さずに済む。"""
+    from btrfs_timeline import i18n
+
+    directory = cockpit.install()
+    path = os.path.join(directory, 'po.manifest.ja.js')
+    assert os.path.isfile(path)
+    with open(path, encoding='utf-8') as handle:
+        text = handle.read()
+
+    assert text.startswith('cockpit.locale({')
+    assert '"language": "ja"' in text
+    assert json.dumps(i18n.load_catalog('en')[cockpit.MENU_LABEL_KEY]) in text
+    assert i18n.load_catalog('ja')[cockpit.MENU_LABEL_KEY] in text
+
+
+def test_no_translation_file_for_the_source_language(target):
+    """英語は原文なので、訳のファイルは要らない。"""
+    directory = cockpit.install()
+    assert not os.path.exists(os.path.join(directory, 'po.manifest.en.js'))
+
+
+def test_a_translation_file_exists_for_every_translated_language(target):
+    """言語を足したら、メニュー名の訳も自動的に出来る。"""
+    from btrfs_timeline import i18n
+
+    directory = cockpit.install()
+    english = i18n.load_catalog('en')[cockpit.MENU_LABEL_KEY]
+    for code in i18n.available_languages():
+        if code == 'en':
+            continue
+        if i18n.load_catalog(code).get(cockpit.MENU_LABEL_KEY) == english:
+            continue  # 訳さない選択をした言語
+        assert os.path.isfile(os.path.join(directory, 'po.manifest.{0}.js'.format(code)))

@@ -1,6 +1,7 @@
 {
   "language.name": "English",
 
+  "language.direction": "ltr",
   "cli.description": "Browse and restore previous versions of files from btrfs snapshots.",
   "cli.option.lang": "language for messages (for example en or ja); defaults to BTRFS_TIMELINE_LANG, then the system locale",
   "cli.option.json": "emit machine-readable JSON",
@@ -98,6 +99,7 @@
   "config.command": "report what the user interfaces need to start up",
   "config.language": "language: {language}",
 
+  "cockpit.menu-label": "File history",
   "cockpit.command": "install the Cockpit module, or remove it",
   "cockpit.argument.action": "install, uninstall, or path to print where it would go",
   "cockpit.option.system": "install for every user under /usr/share/cockpit (needs root)",

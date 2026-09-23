@@ -40,6 +40,10 @@ SHARED_FILES = ('index.html', 'app.js', 'i18n.js', 'style.css')
 #: Cockpit 版に固有のファイル
 OWN_FILES = ('manifest.json', 'transport.js')
 
+#: メニューに出る名前。``manifest.json`` の label と一致していなければならない
+#: (Cockpit は原文をキーにして訳を引くため)
+MENU_LABEL_KEY = 'cockpit.menu-label'
+
 
 def target_directory(system: bool = False) -> str:
     """設置先のディレクトリを返す。"""
@@ -74,6 +78,45 @@ def _write_command_file(directory: str) -> None:
             'export const COMMAND = {0};\n'.format(json.dumps(command())))
 
 
+def _write_manifest_translations(directory: str) -> None:
+    """メニューに出る名前の訳を、Cockpit が読む形で書き出す。
+
+    Cockpit は ``manifest.json`` の文字列を直接は訳さない。同じディレクトリの
+    ``po.manifest.<言語>.js`` が ``cockpit.locale()`` を呼び、英語の原文から訳語への
+    対応を渡す、という仕組みになっている (Cockpit 本体のパッケージも同じ形)。
+
+    訳語は **このツールのカタログから取る**。翻訳を追加した人が、メニューの名前だけ
+    別の場所で改めて訳す必要が無いようにするため。
+    """
+    source = i18n.load_catalog(i18n.FALLBACK_LANGUAGE).get(MENU_LABEL_KEY)
+    for code in i18n.available_languages():
+        if code == i18n.FALLBACK_LANGUAGE:
+            continue  # 原文なので訳は要らない
+        catalog = i18n.load_catalog(code)
+        translated = catalog.get(MENU_LABEL_KEY)
+        if not translated or translated == source:
+            continue
+        path = os.path.join(directory, 'po.manifest.{0}.js'.format(code))
+        with open(path, 'w', encoding='utf-8') as handle:
+            # Cockpit 本体が出力するものと同じ形にしてある。plural-forms は
+            # このファイルが訳すのがメニュー名 1 つだけで複数形を含まないため
+            # 使われないが、読み込み側が期待する可能性を考えて省かない。
+            handle.write(
+                'cockpit.locale({\n'
+                ' "": {\n'
+                '  "plural-forms": (n) => 0,\n'
+                '  "language": %s,\n'
+                '  "language-direction": %s\n'
+                ' },\n'
+                ' %s: [null, %s]\n'
+                '});\n' % (
+                    json.dumps(code),
+                    json.dumps(catalog.get('language.direction', 'ltr')),
+                    json.dumps(source, ensure_ascii=False),
+                    json.dumps(translated, ensure_ascii=False),
+                ))
+
+
 def install(system: bool = False) -> str:
     """Cockpit モジュールを設置し、設置先のパスを返す。"""
     directory = target_directory(system)
@@ -86,6 +129,7 @@ def install(system: bool = False) -> str:
         shutil.copyfile(os.path.join(SOURCE_DIRECTORY, name),
                         os.path.join(directory, name))
     _write_command_file(directory)
+    _write_manifest_translations(directory)
     return directory
 
 

@@ -219,7 +219,9 @@ btrfs-timeline cockpit install --system   # into /usr/share/cockpit, for every u
 btrfs-timeline cockpit uninstall
 ```
 
-Reload Cockpit and look under Tools for **File history**. No restart, no service.
+Reload Cockpit and look under Tools for **File history**. No restart, no service. The
+menu entry is translated from the same catalogs as everything else, so it follows the
+language Cockpit is being used in.
 
 It is the same `index.html`, `app.js`, `i18n.js` and `style.css` — copied, not rewritten.
 The only file that differs is `transport.js`, which calls the CLI instead of an HTTP API:

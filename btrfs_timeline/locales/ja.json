@@ -1,6 +1,7 @@
 {
   "language.name": "日本語",
 
+  "language.direction": "ltr",
   "cli.description": "btrfs のスナップショットから、ファイルの過去の版を辿って復元します。",
   "cli.option.lang": "メッセージの言語 (例: en, ja)。既定は BTRFS_TIMELINE_LANG、次にシステムのロケール",
   "cli.option.json": "機械可読な JSON を出力する",
@@ -98,6 +99,7 @@
   "config.command": "各ユーザーインターフェースが起動時に必要とする設定を出力する",
   "config.language": "言語: {language}",
 
+  "cockpit.menu-label": "ファイル履歴",
   "cockpit.command": "Cockpit モジュールを設置する / 取り除く",
   "cockpit.argument.action": "install（設置）、uninstall（削除）、path（設置先の表示）",
   "cockpit.option.system": "/usr/share/cockpit に全ユーザー向けで設置する (root が必要)",

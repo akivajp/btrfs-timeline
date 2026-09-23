@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-09-23
+
+### Fixed
+
+- The Cockpit menu entry stayed English in an otherwise translated interface. Cockpit
+  does not translate `manifest.json` itself; it looks for a sibling
+  `po.manifest.<language>.js` that maps the English string to a translation. `cockpit
+  install` now generates those **from the same catalogs the rest of the tool uses**, so a
+  language added as one JSON file gets its menu entry translated too, with no second
+  place to keep in sync. A test pins the manifest's label to the English catalog entry,
+  since that string is the key the translation is looked up by.
+
 ## [0.2.0] - 2026-09-23
 
 ### Added
@@ -101,5 +113,6 @@ release contains.
 - Terminal tables are padded by display width, so East Asian full-width characters line
   up.
 
+[0.2.1]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.2.1
 [0.2.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.2.0
 [0.1.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.1.0

@@ -220,8 +220,9 @@ btrfs-timeline cockpit install --system   # /usr/share/cockpit に全ユーザ�
 btrfs-timeline cockpit uninstall
 ```
 
-Cockpit を開き直して、ツールの中の **File history** を選んでください。
-再起動もサービスの追加も必要ありません。
+Cockpit を開き直して、ツールの中の **ファイル履歴** を選んでください。
+再起動もサービスの追加も必要ありません。メニューの項目名も他と同じカタログから
+訳されるので、Cockpit を使っている言語に追随します。
 
 中身は `index.html`・`app.js`・`i18n.js`・`style.css` をそのままコピーしたもので、
 書き換えは一切していません。**違うのは `transport.js` だけ**で、HTTP API の代わりに
