@@ -312,6 +312,12 @@ def test_the_subvolume_behind_each_mount_is_shown(dashboard):
     assert '/mnt/tank/home' in dashboard['rendered']
 
 
+def test_the_per_device_breakdown_is_shown_when_it_is_available(dashboard):
+    """root で読めたときだけ、どの割り当てがどのデバイスに載っているかを出す。"""
+    assert 'Data,RAID1' in dashboard['rendered']
+    assert 'Metadata,RAID1' in dashboard['rendered']
+
+
 def test_model_and_temperature_are_shown(dashboard):
     assert 'ACME 2TB' in dashboard['rendered']
     assert '38 °C' in dashboard['rendered']

@@ -130,6 +130,24 @@ const allocationRowsWithSpread = (allocations, deviceCount) =>
     formatSize(allocation.used_bytes),
   ]));
 
+// デバイスごとの割り当て内訳。root でしか読めないので、得られたときだけ出す。
+// **空の表を出して「何も載っていない」と見せない。**
+const usageRows = (devices) => {
+  const rows = [];
+  devices.forEach((device) => {
+    const allocations = (device.usage && device.usage.allocations) || {};
+    Object.entries(allocations).forEach(([name, size]) => {
+      rows.push(row([device.path || '-', name, formatSize(size)]));
+    });
+    if (device.usage && device.usage.unallocated !== null
+        && device.usage.unallocated !== undefined) {
+      rows.push(row([device.path || '-', t('web.column.unallocated'),
+                     formatSize(device.usage.unallocated)]));
+    }
+  });
+  return rows;
+};
+
 const renderFilesystem = (filesystem, scrub) => {
   const section = node('section', 'filesystem');
   section.append(node('h2', null, filesystem.label || filesystem.uuid));
@@ -147,11 +165,6 @@ const renderFilesystem = (filesystem, scrub) => {
     ['web.column.mounted-at', 'web.column.subvolume'],
     mountRows(filesystem.mounts || [])));
 
-  // 見出しの代わりに関係を 1 行で述べる。表の列にすると誤解を招く
-  section.append(node('p', 'note', t('web.devices.spread', {
-    count: filesystem.devices.length,
-  })));
-
   section.append(table(
     ['devices.column.devid', 'devices.column.device', 'devices.column.model',
      'devices.column.size', 'devices.column.temperature',
@@ -162,6 +175,14 @@ const renderFilesystem = (filesystem, scrub) => {
     ['devices.column.allocation', 'devices.column.profile',
      'devices.column.devices', 'devices.column.total', 'devices.column.used'],
     allocationRowsWithSpread(filesystem.allocations, filesystem.devices.length)));
+
+  const breakdown = usageRows(filesystem.devices);
+  if (breakdown.length) {
+    section.append(node('h3', null, t('web.usage.title')));
+    section.append(table(
+      ['devices.column.device', 'devices.column.allocation', 'devices.column.size'],
+      breakdown));
+  }
 
   if (scrub) {
     section.append(node('h3', null, t('web.scrub.title')));

@@ -697,8 +697,12 @@ def cmd_balance(args: argparse.Namespace) -> int:
     return _execute(builder(), args)
 
 
-def _device_to_dict(device) -> dict:
-    """``Device`` を JSON 化できる辞書にする (CLI の公開契約)。"""
+def _device_to_dict(device, usage=None) -> dict:
+    """``Device`` を JSON 化できる辞書にする (CLI の公開契約)。
+
+    ``usage`` は ``btrfs device usage`` から得た内訳。root が無ければ取れないので、
+    **無い場合は None のまま**にする。空の辞書と「取れなかった」を混同しない。
+    """
     return {
         'devid': device.devid, 'name': device.name, 'path': device.path,
         'size': device.size, 'missing': device.missing,
@@ -709,13 +713,14 @@ def _device_to_dict(device) -> dict:
         'temperature_critical': device.temperature_critical,
         # 閾値はデバイス自身の申告で判断する。こちらで何度から危ないかを
         # 決めてしまうと、外れたときに警告そのものが信用されなくなる
+        'usage': usage,
         'too_hot': (device.temperature is not None
                     and device.temperature_critical is not None
                     and device.temperature >= device.temperature_critical),
     }
 
 
-def filesystem_to_dict(filesystem) -> dict:
+def filesystem_to_dict(filesystem, usage=None) -> dict:
     """``Filesystem`` を JSON 化できる辞書にする (CLI の公開契約)。
 
     ``command`` には **実際に実行したコマンド** とその危険度が入る。
@@ -732,7 +737,8 @@ def filesystem_to_dict(filesystem) -> dict:
         'exclusive_operation': filesystem.exclusive_operation,
         'command': (filesystem.stats_command.to_dict()
                     if filesystem.stats_command else None),
-        'devices': [_device_to_dict(d) for d in filesystem.devices],
+        'devices': [_device_to_dict(d, (usage or {}).get(d.path))
+                    for d in filesystem.devices],
         'allocations': [{
             'kind': a.kind, 'profile': a.profile,
             'total_bytes': a.total_bytes, 'used_bytes': a.used_bytes,
@@ -748,8 +754,22 @@ def cmd_devices(args: argparse.Namespace) -> int:
     """
     found = devices_module.discover()
 
+    # デバイスごとの内訳は別のコマンドから来る。root が無いと割り当ての行が
+    # 落ちるが、**取れなかったことを 0 と偽らずに** 空のまま返す
+    usage = {}
+    usage_command = None
+    if getattr(args, 'usage', False):
+        for filesystem in found:
+            for mount in filesystem.mount_points[:1]:
+                breakdown, usage_command = devices_module.usage_by_device(
+                    mount, use_sudo=getattr(args, 'sudo', False))
+                usage.update(breakdown)
+
     if args.json:
-        _emit_json({'filesystems': [filesystem_to_dict(f) for f in found]})
+        payload = {'filesystems': [filesystem_to_dict(f, usage) for f in found]}
+        if usage_command is not None:
+            payload['usage_command'] = usage_command.to_dict()
+        _emit_json(payload)
         return 0
 
     if not found:
@@ -1028,6 +1048,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     # --- devices
     devices_parser = subparsers.add_parser('devices', help=_('devices.command'))
+    devices_parser.add_argument('--usage', action='store_true',
+                                help=_('devices.option.usage'))
+    devices_parser.add_argument('--sudo', action='store_true', help=_('cli.option.sudo'))
     devices_parser.add_argument('--json', action='store_true', help=_('cli.option.json'))
     _add_language_option(devices_parser)
     devices_parser.set_defaults(func=cmd_devices)

@@ -480,7 +480,9 @@ def usage_operation(path: str) -> operations.Operation:
     肝心の内訳が落ちる)。そのため実行せず、コマンドとして示す。
     """
     return operations.describe(
-        ['btrfs', 'device', 'usage', path],
+        # --raw を付けてバイト値で受け取る。単位付きの表示は人間向けで、
+        # 解釈すると丸めの分だけ数字がずれる
+        ['btrfs', 'device', 'usage', '--raw', path],
         risk=operations.SAFE, needs_root=True,
         summary_key='operation.device-usage', path=path)
 
@@ -496,3 +498,79 @@ def smart_operation(device: str) -> operations.Operation:
         ['smartctl', '-H', '-A', device],
         risk=operations.SAFE, needs_root=True,
         summary_key='operation.smart', device=device)
+
+
+def parse_device_usage(text: str) -> dict:
+    """``btrfs device usage --raw`` の出力を解釈する。
+
+    **非特権でも実行はできるが、肝心の内訳が落ちる。** btrfs 自身が
+    ``cannot read detailed chunk info, per-device usage will not be shown, run as root``
+    と言い、``Device size`` と ``Unallocated: N/A`` しか出さない。
+    root があれば ``Data,RAID0:`` のような行が加わり、どの割り当てがどのデバイスに
+    どれだけ載っているかが分かる。
+
+    どちらの出力も受け取れるようにしてあり、内訳が無い場合は
+    ``allocations`` が空になる。**取れなかったことを、0 と偽らない。**
+
+    Returns:
+        ``{デバイスパス: {'devid', 'size', 'slack', 'unallocated', 'allocations'}}``
+    """
+    found = {}
+    current = None
+
+    for line in (text or '').splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith('WARNING'):
+            continue
+
+        # ``/dev/sda1, ID: 1`` がデバイスの見出し
+        if ', ID:' in stripped:
+            path, _, devid = stripped.partition(', ID:')
+            current = path.strip()
+            found[current] = {
+                'devid': _as_optional_int(devid.strip()),
+                'size': None, 'slack': None, 'unallocated': None,
+                'allocations': {},
+            }
+            continue
+
+        if current is None or ':' not in stripped:
+            continue
+        name, _, value = stripped.partition(':')
+        name = name.strip()
+        number = _as_optional_int(value.strip())
+
+        if name == 'Device size':
+            found[current]['size'] = number
+        elif name == 'Device slack':
+            found[current]['slack'] = number
+        elif name == 'Unallocated':
+            found[current]['unallocated'] = number
+        elif ',' in name:
+            # ``Data,RAID1`` のような、割り当ての種類とプロファイルの組
+            found[current]['allocations'][name] = number
+    return found
+
+
+def _as_optional_int(value: str):
+    """``N/A`` や単位付きの値は None にする。読めないものを 0 と偽らない。"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def usage_by_device(path: str, use_sudo: bool = False):
+    """デバイスごとの割り当て内訳を取りに行く。
+
+    Returns:
+        ``(内訳, 実行した Operation)``。取れなければ内訳は空。
+    """
+    operation = usage_operation(path)
+    if use_sudo:
+        operation = operation.with_sudo()
+    try:
+        result = operations.run(operation, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return {}, operation
+    return parse_device_usage(result.stdout), operation

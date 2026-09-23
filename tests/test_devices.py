@@ -333,3 +333,61 @@ def test_adding_still_only_needs_yes(never_runs):
 
     assert cli.main(['device', 'add', '/dev/sdb', '--path', '/mnt', '--yes']) == 0
     assert never_runs[0][1] is None
+
+
+# --------------------------------------------------------------------------
+# デバイスごとの内訳 (root が要る部分)
+# --------------------------------------------------------------------------
+
+ROOT_USAGE = """/dev/sda1, ID: 1
+   Device size:          1999269527552
+   Device slack:                  0
+   Data,RAID0/4:         256057016320
+   Metadata,RAID1:       15032385536
+   Unallocated:          1718482894848
+
+/dev/sdb1, ID: 2
+   Device size:          2000398934016
+   Device slack:                  0
+   Data,RAID0/4:         256057016320
+   Unallocated:          1728482894848
+"""
+
+UNPRIVILEGED_USAGE = """WARNING: cannot read detailed chunk info, per-device usage \
+will not be shown, run as root
+/dev/sda1, ID: 1
+   Device size:          1999269527552
+   Device slack:                  0
+   Unallocated:                 N/A
+"""
+
+
+def test_root_output_carries_the_breakdown():
+    found = devices.parse_device_usage(ROOT_USAGE)
+    assert set(found) == {'/dev/sda1', '/dev/sdb1'}
+    assert found['/dev/sda1']['devid'] == 1
+    assert found['/dev/sda1']['size'] == 1999269527552
+    assert found['/dev/sda1']['allocations']['Data,RAID0/4'] == 256057016320
+    assert found['/dev/sda1']['allocations']['Metadata,RAID1'] == 15032385536
+
+
+def test_unprivileged_output_has_no_breakdown_and_says_so_by_being_empty():
+    """**取れなかったことを 0 と偽らない。**
+
+    非特権では btrfs 自身が内訳を出さない。そこを 0 と埋めると、画面が
+    「このデバイスには何も載っていない」と言うことになる。
+    """
+    found = devices.parse_device_usage(UNPRIVILEGED_USAGE)
+    assert found['/dev/sda1']['allocations'] == {}
+    assert found['/dev/sda1']['unallocated'] is None
+    assert found['/dev/sda1']['size'] == 1999269527552
+
+
+def test_usage_uses_raw_numbers():
+    """単位付きの表示を解釈すると、丸めの分だけ数字がずれる。"""
+    assert '--raw' in devices.usage_operation('/mnt').argv
+
+
+def test_garbage_does_not_raise():
+    assert devices.parse_device_usage('nonsense') == {}
+    assert devices.parse_device_usage('') == {}

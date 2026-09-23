@@ -348,9 +348,16 @@ It does not print a device beside each mount. In btrfs every mount is served by 
 device, and the one in `mountinfo` merely records which node was named at mount time; as
 a column it makes every row show the same disk and reads as though that mount lived
 there. The relationship is stated once, and the allocation table says how many devices
-each profile spreads across. For the per-device breakdown — which allocation sits on
-which disk, in what quantity — `btrfs device usage` is offered as a command, since that
-is the one part here that needs the chunk information and therefore root.
+each profile spreads across. The per-device breakdown — which allocation sits on which disk, in what quantity —
+needs the chunk information, and that needs root. **The Cockpit module asks for it
+through Cockpit's own mechanism**: that one call uses `superuser: "try"`, so it appears
+when the session has administrative access and is simply absent when it does not.
+Nothing else in the module asks for privilege.
+
+The standalone server does not show it, and offers `btrfs device usage` as a command
+instead. Getting it there would mean either running a file-serving, file-writing web
+server as root, or inventing a privilege mechanism of our own. Neither is worth it for a
+breakdown of disk allocation, and Cockpit already solved this problem properly.
 
 **Temperature comes from hwmon, unprivileged**, which the NVMe driver populates and the
 `drivetemp` module does for SATA. A device is flagged as too hot against **the limit it

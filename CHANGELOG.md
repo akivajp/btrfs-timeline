@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-09-23
+
+### Added
+
+- **`devices --usage`** reports how much of each allocation sits on each device. The
+  detail needs root — btrfs itself says `run as root` and omits the allocation lines
+  otherwise — so what is unavailable stays absent rather than being filled in with zeros.
+- **The Cockpit module asks for the elevation, through Cockpit's own mechanism.** That
+  one call uses `superuser: "try"`, so it returns the breakdown when the session has
+  administrative access and degrades to the same view as before when it does not. Nothing
+  else in the module asks for privilege: browsing history and restoring still run as the
+  logged-in user.
+
+### Changed
+
+- The dashboard no longer explains the mount-to-device relationship in a paragraph on
+  screen. It belongs in the README, not in the interface.
+
+### Notes
+
+- The standalone server is unchanged and still runs unprivileged. Getting this data there
+  would mean either running a file-serving, file-writing web server as root, or inventing
+  a privilege mechanism; neither is worth it for a breakdown of disk allocation. Cockpit
+  already solved this problem properly, so the privileged view lives there.
+
 ## [0.7.1] - 2026-09-23
 
 ### Fixed
@@ -252,6 +277,7 @@ release contains.
 - Terminal tables are padded by display width, so East Asian full-width characters line
   up.
 
+[0.8.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.8.0
 [0.7.1]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.7.1
 [0.7.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.7.0
 [0.6.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.6.0
