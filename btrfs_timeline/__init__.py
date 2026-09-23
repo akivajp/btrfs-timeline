@@ -2,4 +2,4 @@
 # -*- coding: utf-8 -*-
 """btrfs-timeline: btrfs スナップショットからファイルの過去版を辿り、復元する。"""
 
-__version__ = '0.1.0'
+__version__ = '0.2.0'

@@ -5,8 +5,8 @@ Mac の Time Machine のような感覚で。
 
 [English README is here](README.md)
 
-> **状態: 開発初期。** 履歴の閲覧・版のプレビュー・復元は、CLI からもブラウザからも
-> 利用できます。次は Cockpit モジュールを実装します。
+> **状態: 開発初期。** 履歴の閲覧・版のプレビュー・復元は、CLI からも、
+> スタンドアロンの Web UI からも、Cockpit モジュールとしても利用できます。
 > [ロードマップ](#ロードマップ)を参照してください。
 
 ![Web UI。左がファイル一覧、右が選択したファイルの版の一覧で、各版にプレビューと復元のボタンが並んでいる](https://raw.githubusercontent.com/akivajp/btrfs-timeline/main/docs/screenshot-ja.png)
@@ -108,6 +108,10 @@ btrfs-timeline browse ~/Documents --snapshot 1729
 btrfs-timeline diff ~/notes.md --from 2
 btrfs-timeline diff ~/notes.md --from 2 --to 3
 
+# 過去の版の内容 / 変更点
+btrfs-timeline preview ~/notes.md --index 2
+btrfs-timeline diff ~/notes.md --from 2
+
 # Web UI を開く
 btrfs-timeline serve
 ```
@@ -205,6 +209,37 @@ BASIC 認証だけでは、他サイトがブラウザに代理でリクエス�
 サーバーはあなたの権限で動くので、あなたが読めるものしか読めません。
 root は不要です — `btrfs subvolume list` を使わないことの狙いがここにあります。
 
+## Cockpit モジュール
+
+既に [Cockpit](https://cockpit-project.org/) を使っている場合は、同じ画面を
+その中から開けます。
+
+```shell
+btrfs-timeline cockpit install            # ~/.local/share/cockpit に設置
+btrfs-timeline cockpit install --system   # /usr/share/cockpit に全ユーザー向けで設置
+btrfs-timeline cockpit uninstall
+```
+
+Cockpit を開き直して、ツールの中の **File history** を選んでください。
+再起動もサービスの追加も必要ありません。
+
+中身は `index.html`・`app.js`・`i18n.js`・`style.css` をそのままコピーしたもので、
+書き換えは一切していません。**違うのは `transport.js` だけ**で、HTTP API の代わりに
+CLI を呼びます。
+
+```js
+cockpit.spawn([...COMMAND, 'history', path, '--json'])
+```
+
+**特権昇格は要求しません。** スナップショットの閲覧に root は要らず、復元はログイン中の
+利用者の権限で書くため、それ以上を求める理由がないからです。
+テストでは本物の `app.js` を両方の経路で走らせ、**最終的な画面が一致すること**を
+検証しています。
+
+`cockpit.spawn` はシェルの `PATH` を引き継がないため、`install` は
+**実行した環境の絶対パス**を記録します。`btrfs-timeline` 自体の入れ方を変えたときは、
+設置し直してください。
+
 ## 翻訳
 
 メッセージは [`btrfs_timeline/locales/`](btrfs_timeline/locales/) に置かれた JSON の
@@ -259,9 +294,10 @@ Python と JavaScript の双方から読める形式を1つにしておくこと
 ## ロードマップ
 
 1. **ファイル履歴ブラウザ / スタンドアロン Web UI** — 実装済み
-2. **Cockpit モジュール** — 現在の主眼。同じ CLI と同じ画面を使い、
+2. **Cockpit モジュール** — 実装済み。同じ CLI と同じ画面を使い、
    差し替えるのは `transport.js` だけ
-3. **ダッシュボードとデバイス管理** — デバイス一覧、RAID 構成、scrub/balance の進捗
+3. **ダッシュボードとデバイス管理** — 現在の主眼。デバイス一覧、RAID 構成、
+   scrub/balance の進捗
 4. **デスクトップ GUI**
 
 デバイス管理 (3) は失敗するとファイルシステムを壊しうるもので、

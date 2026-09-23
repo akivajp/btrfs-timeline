@@ -6,7 +6,7 @@ Time Machine does it, from a browser.
 [日本語版 README はこちら](README.ja.md)
 
 > **Status: early development.** Browsing history, previewing versions and restoring
-> files all work, from the CLI and from the browser. The Cockpit module is next.
+> files all work — from the CLI, from a standalone web UI, and as a Cockpit module.
 > See [Roadmap](#roadmap).
 
 ![The web UI: a file browser on the left, and on the right the versions of the selected file, each with a preview and a restore button](https://raw.githubusercontent.com/akivajp/btrfs-timeline/main/docs/screenshot-en.png)
@@ -107,6 +107,10 @@ btrfs-timeline browse ~/Documents --snapshot 1729
 btrfs-timeline diff ~/notes.md --from 2
 btrfs-timeline diff ~/notes.md --from 2 --to 3
 
+# Show a past version, or what changed
+btrfs-timeline preview ~/notes.md --index 2
+btrfs-timeline diff ~/notes.md --from 2
+
 # Open the web UI
 btrfs-timeline serve
 ```
@@ -204,6 +208,35 @@ making your browser send the request for you.
 The server runs as you, so it can only read what you can read. It does not need root —
 that is the point of not using `btrfs subvolume list`.
 
+## Cockpit module
+
+If you already run [Cockpit](https://cockpit-project.org/), the same screen is available
+inside it:
+
+```shell
+btrfs-timeline cockpit install     # into ~/.local/share/cockpit
+btrfs-timeline cockpit install --system   # into /usr/share/cockpit, for every user
+btrfs-timeline cockpit uninstall
+```
+
+Reload Cockpit and look under Tools for **File history**. No restart, no service.
+
+It is the same `index.html`, `app.js`, `i18n.js` and `style.css` — copied, not rewritten.
+The only file that differs is `transport.js`, which calls the CLI instead of an HTTP API:
+
+```js
+cockpit.spawn([...COMMAND, 'history', path, '--json'])
+```
+
+**It asks for no privilege escalation.** Browsing snapshots does not need root, and
+restoring writes as the logged-in user, so there is no reason to demand more. The tests
+run the real `app.js` through both transports and assert the two end up with the same
+screen.
+
+Because `cockpit.spawn` does not inherit your shell's `PATH`, `install` records the
+absolute path of the installation you ran it from. Run it again after you change how
+`btrfs-timeline` itself is installed.
+
 ## Translations
 
 Messages are translated at runtime from JSON catalogs in
@@ -258,9 +291,9 @@ the directory mtime, in that order.
 ## Roadmap
 
 1. **File history browser, standalone web UI** — done
-2. **Cockpit module** — the current focus: same CLI, same screen, only `transport.js`
-   differs, for people who already run Cockpit
-3. **Dashboard and device management** — devices, RAID profile, scrub/balance progress
+2. **Cockpit module** — done: same CLI, same screen, only `transport.js` differs
+3. **Dashboard and device management** — the current focus: devices, RAID profile,
+   scrub/balance progress
 4. **Desktop GUI**
 
 Device management (3) can destroy a filesystem when it goes wrong, which is a different

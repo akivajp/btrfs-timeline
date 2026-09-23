@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---|---|
-| 0.1.x | Yes |
+| 0.2.x | Yes |
+| 0.1.x | No — upgrade |
 
 ## Reporting a vulnerability
 
@@ -15,7 +16,9 @@ rather than opening a public issue.
 ## Threat model
 
 Two things about this tool decide its risk: it **serves the contents of files over
-HTTP**, and it **writes files** on request.
+HTTP**, and it **writes files** on request. The Cockpit module carries the same risk
+through a different door: it starts the CLI as the logged-in user, without asking for
+privilege escalation, so it can reach exactly what that user can reach.
 
 Design assumptions:
 

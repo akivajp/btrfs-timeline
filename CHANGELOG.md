@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-09-23
+
+### Added
+
+- **Cockpit module.** `btrfs-timeline cockpit install` places it where Cockpit looks;
+  it then appears under Tools as "File history". It is the same `index.html`, `app.js`,
+  `i18n.js` and `style.css` the standalone UI uses, copied rather than rewritten — the
+  only file that differs is `transport.js`, which calls the CLI through `cockpit.spawn`
+  instead of an HTTP API. It requests **no privilege escalation**: browsing snapshots
+  does not need root and restoring writes as the logged-in user. `install` records the
+  absolute path of the installation it was run from, because `cockpit.spawn` does not
+  inherit a shell `PATH`.
+- `preview` shows a past version's contents — on its own, and as the call the Cockpit
+  module makes where the web UI has `/api/preview`.
+- `config` reports what a front-end needs to start: version, language, the available
+  languages and the translation catalog. The web UI's `/api/config` is now built from
+  the same function, so the two cannot drift.
+- `restore --json` includes the version number it acted on, matching the web API.
+
+### Testing
+
+- The real `app.js` is driven through **both** transports and the two are asserted to end
+  up with the same screen — the claim the architecture rests on.
+- The CLI's `--json` and the HTTP API are asserted to return identical payloads for the
+  same question, which is what lets the Cockpit module exist at all.
+
 ## [0.1.0] - 2026-09-23
 
 First public release. Nothing here is a change from an earlier version; this is what the
@@ -75,4 +101,5 @@ release contains.
 - Terminal tables are padded by display width, so East Asian full-width characters line
   up.
 
+[0.2.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.2.0
 [0.1.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.1.0
