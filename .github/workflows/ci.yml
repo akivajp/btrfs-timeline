@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 対応を宣言している下限・中間・最新の Python で検証する
+        python-version: ['3.9', '3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package with dev dependencies
+        run: pip install -e '.[dev]'
+
+      # ブラウザ側の操作テストは Node があるときだけ走る。
+      # ubuntu-latest には最初から入っているので、CI では必ず実行される。
+      - name: Show Node version
+        run: node --version
+
+      - name: Run tests
+        run: pytest
+
+      - name: Verify CLI entry point
+        run: btrfs-timeline --version
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Build distributions
+        run: |
+          pip install build twine
+          python -m build
+
+      - name: Check distribution metadata
+        run: twine check dist/*
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
