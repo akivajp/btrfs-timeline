@@ -471,6 +471,20 @@ def replace_cancel_operation(path: str) -> operations.Operation:
         summary_key='operation.device-replace-cancel', path=path)
 
 
+def usage_operation(path: str) -> operations.Operation:
+    """デバイスごとの割り当て内訳を見る。
+
+    「どの割り当てがどのデバイスに、どれだけ載っているか」はここでしか分からない。
+    sysfs は割り当ての合計しか持たず、チャンク単位の情報は root を要する
+    (非特権で実行すると ``cannot read detailed chunk info`` と言われ、
+    肝心の内訳が落ちる)。そのため実行せず、コマンドとして示す。
+    """
+    return operations.describe(
+        ['btrfs', 'device', 'usage', path],
+        risk=operations.SAFE, needs_root=True,
+        summary_key='operation.device-usage', path=path)
+
+
 def smart_operation(device: str) -> operations.Operation:
     """``smartctl`` でディスク自身の健康状態を見る。
 

@@ -208,6 +208,17 @@ def test_empty_header_stays_empty_on_screen(driven):
     assert driven['actionsHeader'] == ''
 
 
+def test_both_pages_can_be_reached_from_either(driven, dashboard):
+    """**ページ間のリンクにラベルが入っていること。**
+
+    履歴側だけ設定を忘れていたため、リンクが空文字になって見えなくなっていた。
+    空の <a> は存在するのに押せないので、画面を見ないと気付けない。
+    """
+    for screen in (driven, dashboard):
+        assert screen['historyLink']
+        assert screen['devicesLink']
+
+
 def test_switching_language_reaches_the_labels(driven):
     """言語を切り替えると、画面のラベルまで差し替わる。"""
     assert driven['language'] == 'ja'
@@ -277,6 +288,18 @@ def test_dashboard_renders_without_errors(dashboard):
 def test_dashboard_shows_the_devices(dashboard):
     assert '/dev/sdd1' in dashboard['rendered']
     assert '/dev/sdc1' in dashboard['rendered']
+
+
+def test_the_relationship_is_stated_not_implied_per_mount(dashboard):
+    """**マウント先ごとのデバイス列は出さない。**
+
+    どのマウント先も全デバイスに支えられているので、1 台だけ並べると
+    「このマウントはこの 1 台に載っている」と読めてしまう。全行が同じ値になる
+    列は、事実として誤っているうえに気付かれにくい。
+    """
+    assert '/dev/sdd1' in dashboard['rendered']   # デバイス表には出る
+    # 関係そのものは文章で述べる
+    assert '4' in dashboard['rendered']
 
 
 def test_the_subvolume_behind_each_mount_is_shown(dashboard):

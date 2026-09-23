@@ -460,6 +460,10 @@ const applyLabels = () => {
   el('path-input').placeholder = t('web.path-placeholder');
   el('path-go').textContent = t('web.go');
   el('browser-title').textContent = t('web.browser.title');
+  // これを忘れていたため、履歴ページのページ間リンクが空文字になり
+  // 見えなくなっていた。ダッシュボード側だけ設定していた
+  el('link-history').textContent = t('web.page.history');
+  el('link-devices').textContent = t('web.page.devices');
   el('timeline-title').textContent = t('web.timeline.title');
   el('diff-against-text').textContent = t('web.diff.against');
   el('language-text').textContent = t('web.language');

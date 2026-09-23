@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-09-23
+
+### Fixed
+
+- **The history screen had no visible link to the dashboard.** The anchors were there
+  with no text set, so they rendered as empty and unclickable — only the dashboard side
+  had been given its labels. The drive tests now assert both links carry text.
+- **The mount table no longer shows a device per mount.** In btrfs every mount is served
+  by every device; the device in `mountinfo` only records which node was named at mount
+  time. As a column it made all six rows show the same disk and read as though each mount
+  lived there. The relationship is stated once instead, and the allocation table says how
+  many devices each profile spreads across.
+
+### Added
+
+- `btrfs device usage` is offered as a command. Which allocation sits on which device in
+  what quantity is the one part of this that sysfs does not expose — it needs the chunk
+  information, which needs root — so it is shown rather than run.
+
 ## [0.7.0] - 2026-09-23
 
 ### Added
@@ -233,6 +252,7 @@ release contains.
 - Terminal tables are padded by display width, so East Asian full-width characters line
   up.
 
+[0.7.1]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.7.1
 [0.7.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.7.0
 [0.6.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.6.0
 [0.5.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.5.0

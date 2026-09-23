@@ -48,4 +48,6 @@ console.log(JSON.stringify({
   riskBadges,
   alarmRows,
   languageOptions: (byId('language').children || []).length,
+  historyLink: byId('link-history').textContent,
+  devicesLink: byId('link-devices').textContent,
 }));

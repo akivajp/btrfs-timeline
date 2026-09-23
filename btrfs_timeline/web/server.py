@@ -406,6 +406,9 @@ def _suggestions(filesystems) -> list:
     found = []
     for filesystem in filesystems:
         for mount in filesystem.mount_points[:1]:
+            # デバイスごとの内訳は root でしか取れない。画面に出せない以上、
+            # 「これを叩けば分かる」と示すのが次善になる
+            found.append(_suggestion(devices_module.usage_operation(mount)))
             found.append(_suggestion(
                 maintenance_module.scrub_start_operation(mount)))
         for device in filesystem.devices:

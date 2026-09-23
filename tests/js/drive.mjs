@@ -89,4 +89,6 @@ console.log(JSON.stringify({
   language: byId('language').value,
   hiddenLabel: byId('hidden-text').textContent,
   actionsHeader: cell('versions-head', 6),
+  historyLink: byId('link-history').textContent,
+  devicesLink: byId('link-devices').textContent,
 }));

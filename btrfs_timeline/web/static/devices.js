@@ -111,16 +111,24 @@ const deviceRows = (devices) => devices.map((device) => {
     device.missing || device.has_errors || device.too_hot ? 'alarm' : '');
 });
 
+// マウント先ごとのデバイスは出さない。
+//
+// btrfs では **どのマウント先も、全デバイスに支えられている**。mountinfo に出る
+// デバイスは「マウント時にどのデバイスノードを指定したか」でしかなく、
+// そのマウントがそこに載っているという意味ではない。列にすると全行が同じ 1 台に
+// なり、しかもそれが事実だと読めてしまう。関係は文章で 1 度述べるほうが正しい。
 const mountRows = (mounts) => mounts.map((mount) => row([
-  mount.path, mount.subvol || '-', mount.device || '-',
+  mount.path, mount.subvol || '-',
 ]));
 
-const allocationRows = (allocations) => allocations.map((allocation) => row([
-  allocation.kind,
-  allocation.profile || '-',
-  formatSize(allocation.total_bytes),
-  formatSize(allocation.used_bytes),
-]));
+const allocationRowsWithSpread = (allocations, deviceCount) =>
+  allocations.map((allocation) => row([
+    allocation.kind,
+    allocation.profile || '-',
+    deviceCount,
+    formatSize(allocation.total_bytes),
+    formatSize(allocation.used_bytes),
+  ]));
 
 const renderFilesystem = (filesystem, scrub) => {
   const section = node('section', 'filesystem');
@@ -136,8 +144,13 @@ const renderFilesystem = (filesystem, scrub) => {
   // どのサブボリュームがどこに出ているか。btrfs では 1 つのファイルシステムが
   // 複数の場所に現れるので、これが見えないと一覧と実感が結び付かない
   section.append(table(
-    ['web.column.mounted-at', 'web.column.subvolume', 'web.column.through'],
+    ['web.column.mounted-at', 'web.column.subvolume'],
     mountRows(filesystem.mounts || [])));
+
+  // 見出しの代わりに関係を 1 行で述べる。表の列にすると誤解を招く
+  section.append(node('p', 'note', t('web.devices.spread', {
+    count: filesystem.devices.length,
+  })));
 
   section.append(table(
     ['devices.column.devid', 'devices.column.device', 'devices.column.model',
@@ -147,8 +160,8 @@ const renderFilesystem = (filesystem, scrub) => {
 
   section.append(table(
     ['devices.column.allocation', 'devices.column.profile',
-     'devices.column.total', 'devices.column.used'],
-    allocationRows(filesystem.allocations)));
+     'devices.column.devices', 'devices.column.total', 'devices.column.used'],
+    allocationRowsWithSpread(filesystem.allocations, filesystem.devices.length)));
 
   if (scrub) {
     section.append(node('h3', null, t('web.scrub.title')));
