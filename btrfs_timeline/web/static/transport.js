@@ -22,8 +22,13 @@ async function request(url, options) {
   return data;
 }
 
+// 選ばれている言語。サーバーが訳す文 (エラーなど) をこの言語で返させる
+let language = null;
+
 const query = (path, extra) => {
-  const params = new URLSearchParams({ path, ...(extra || {}) });
+  const params = new URLSearchParams({
+    path, ...(extra || {}), ...(language ? { lang: language } : {}),
+  });
   return params.toString();
 };
 
@@ -36,8 +41,12 @@ export const FLAVOUR = 'standalone';
 // 引数は受けるが何もしない (画面が経路ごとに分岐せずに済むように)。
 export const canElevate = false;
 
-export const fetchConfig = (lang) =>
-  request(`./api/config${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`);
+export const fetchConfig = async (lang) => {
+  const config = await request(
+    `./api/config${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`);
+  language = config.language;
+  return config;
+};
 
 // snapshot を渡すと「その時点の内容」が返る。削除された項目もそこに現れる。
 export const fetchBrowse = (path, snapshot, showHidden) =>
@@ -48,7 +57,8 @@ export const fetchBrowse = (path, snapshot, showHidden) =>
 
 export const fetchHistory = (path) => request(`./api/history?${query(path)}`);
 
-export const fetchDevices = () => request('./api/devices');
+export const fetchDevices = () =>
+  request(`./api/devices${language ? `?lang=${encodeURIComponent(language)}` : ''}`);
 
 // この経路に権限の切り替えは無い。何も起きない口だけ揃えておく
 export const onPrivilegeChange = async (_handler) => null;

@@ -110,6 +110,7 @@ export const fakeDevices = async () => ({
       argv: ['btrfs', '--format', 'json', 'device', 'stats', '/mnt/tank'],
       command: 'btrfs --format json device stats /mnt/tank',
       risk: 'safe', needs_root: false, summary: 'read the error counters',
+      summary_key: 'operation.device-stats', params: { path: '/mnt/tank' },
     },
     devices: [
       device(1, 'sdd1'),
@@ -131,6 +132,7 @@ export const fakeDevices = async () => ({
     command: 'sudo btrfs scrub start /mnt/tank',
     risk: 'caution', needs_root: true,
     summary: 'read every block and repair what it can',
+    summary_key: 'operation.scrub-start', params: { path: '/mnt/tank' },
   }],
 });
 

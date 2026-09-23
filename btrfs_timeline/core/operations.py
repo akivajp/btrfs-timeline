@@ -90,13 +90,21 @@ class Operation(NamedTuple):
         return self._replace(argv=['sudo'] + list(self.argv))
 
     def to_dict(self) -> dict:
-        """JSON 化できる辞書にする (CLI の公開契約)。"""
+        """JSON 化できる辞書にする (CLI の公開契約)。
+
+        ``summary`` は端末向けに訳したもの。**画面はこれを使ってはいけない。**
+        訳すのはこちらの言語であって、見る人が選んだ言語ではない。
+        ブラウザは ``summary_key`` と ``params`` を受け取って自分で訳す
+        (カタログを持っているのは、まさにそのためである)。
+        """
         return {
             'argv': list(self.argv),
             'command': self.display(),
             'risk': self.risk,
             'needs_root': self.needs_root,
             'summary': self.summary(),
+            'summary_key': self.summary_key,
+            'params': dict(self.params),
             'confirm_token': self.confirm_token,
         }
 

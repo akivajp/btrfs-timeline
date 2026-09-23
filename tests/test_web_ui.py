@@ -444,3 +444,19 @@ def test_in_page_links_are_hidden_under_cockpit(driven, driven_cockpit,
         assert screen['historyLink']
     for screen in (driven_cockpit, dashboard_cockpit):
         assert screen['pagesHidden'] is True
+
+
+def test_an_english_screen_stays_english(dashboard, dashboard_cockpit):
+    """**サーバーが訳した文を、そのまま画面に出さない。**
+
+    説明文をサーバー側で訳して送っていたため、英語の画面に起動時の言語
+    (日本語) が混ざっていた。画面はキーと引数を受け取り、自分の言語で訳す。
+    記号 (``—`` や ``°``) は英語でも使うので、仮名と漢字の範囲だけを見る。
+    """
+    for screen in (dashboard, dashboard_cockpit):
+        assert screen['japanese'] == [], screen['japanese']
+
+
+def test_the_summary_is_translated_on_the_screen(dashboard):
+    """訳はカタログの英語と一致する (サーバーの言語ではなく)。"""
+    assert 'read the error counters of the devices under' in dashboard['rendered']

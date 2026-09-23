@@ -74,6 +74,23 @@ def create_app(settings: Settings, credentials: Optional[Credentials] = None):
     app = bottle.Bottle()
     app.install(make_auth_plugin(credentials, bottle))
 
+    def language_plugin(callback):
+        """要求に付いてきた言語で応答する。
+
+        これが無いと、サーバー側で訳した文だけが **起動時の言語** のまま残り、
+        画面で言語を切り替えても英語の中に日本語が混ざる。
+        """
+        def wrapper(*args, **kwargs):
+            requested = bottle.request.query.get('lang') or None
+            with i18n.use_language(i18n.detect_language(requested)
+                                   if requested else None):
+                return callback(*args, **kwargs)
+        return wrapper
+
+    language_plugin.name = 'btrfs-timeline-language'
+    language_plugin.api = 2
+    app.install(language_plugin)
+
     def fail(status: int, message) -> 'bottle.HTTPResponse':
         """JSON のエラー応答を作る。"""
         return bottle.HTTPResponse(

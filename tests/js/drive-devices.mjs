@@ -49,6 +49,9 @@ console.log(JSON.stringify({
   alarmRows,
   languageOptions: (byId('language').children || []).length,
   historyLink: byId('link-history').textContent,
+  // 英語の画面に日本語が混ざっていないか。記号 (— や °) は英語でも使うので、
+  // 仮名と漢字の範囲だけを見る
+  japanese: (rendered.match(/[\u3040-\u30ff\u4e00-\u9fff]+/g) || []),
   devicesLink: byId('link-devices').textContent,
   pagesHidden: byId('pages').hidden,
 }));

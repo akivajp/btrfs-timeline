@@ -82,7 +82,12 @@ const commandBlock = (command) => {
   const box = node('div', 'command');
   const line = node('code', 'path', command.command);
   const badge = node('span', `risk risk-${command.risk}`, riskLabel(command.risk));
-  const summary = node('p', 'note', command.summary);
+  // **command.summary は使わない。** あれはサーバー (や CLI) が自分の言語で訳した
+  // もので、この画面を見ている人が選んだ言語ではない。キーと引数を受け取って
+  // ここで訳す — カタログを持っているのは、そのためである。
+  const summary = node('p', 'note', command.summary_key
+    ? t(command.summary_key, command.params || {})
+    : command.summary);
   box.append(badge, line, summary);
   return box;
 };

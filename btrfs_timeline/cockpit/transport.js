@@ -64,6 +64,9 @@ const loadCockpit = () => {
 
 const run = async (args, options) => {
   const cockpit = await loadCockpit();
+  // 言語が決まっていれば毎回伝える。CLI は起動するたびに環境から言語を決めるので、
+  // これが無いと画面と応答の言語が食い違う
+  args = language ? [...args, '--lang', language] : args;
   let output;
   try {
     // err: 'message' で、失敗時の例外に標準エラー出力の内容が入る。
@@ -76,9 +79,16 @@ const run = async (args, options) => {
   return JSON.parse(output);
 };
 
+// 選ばれている言語。CLI が訳す文 (エラーなど) をこの言語で返させる
+let language = null;
+
 const flag = (condition, ...args) => (condition ? args : []);
 
-export const fetchConfig = (lang) => run(['config', ...flag(lang, '--lang', lang)]);
+export const fetchConfig = async (lang) => {
+  const config = await run(['config', ...flag(lang, '--lang', lang)]);
+  language = config.language;
+  return config;
+};
 
 export const fetchBrowse = (path, snapshot, showHidden) => run([
   'browse', path,

@@ -22,8 +22,10 @@ gettext ではなく **JSON のカタログ** を使っている。理由は 2 �
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import threading
 from typing import Optional
 
 LOCALE_DIRECTORY = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'locales')
@@ -42,6 +44,10 @@ _catalogs = {}
 
 # 現在選択されている言語。None なら未設定
 _current_language = None
+
+# 要求ごとの上書き。**スレッドごとに独立** させてあるのは、複数の要求を同時に
+# 扱うサーバーで、片方の言語がもう片方の応答に混ざらないようにするため。
+_override = threading.local()
 
 
 def available_languages() -> list:
@@ -135,8 +141,26 @@ def set_language(language: Optional[str]) -> str:
     return _current_language
 
 
+@contextlib.contextmanager
+def use_language(language: Optional[str]):
+    """このブロックの間だけ言語を差し替える。
+
+    Web サーバーが「要求してきた人の言語」で応答するために使う。
+    プロセス全体の設定は変えないので、同時に来た別の要求に影響しない。
+    """
+    previous = getattr(_override, 'language', None)
+    _override.language = language or None
+    try:
+        yield
+    finally:
+        _override.language = previous
+
+
 def current_language() -> str:
     """現在の言語コード。未設定なら環境から決めて設定する。"""
+    override = getattr(_override, 'language', None)
+    if override:
+        return override
     if _current_language is None:
         set_language(detect_language())
     return _current_language

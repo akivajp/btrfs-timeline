@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4] - 2026-09-23
+
+### Fixed
+
+- **Japanese appeared on an English screen.** The explanation under each command was
+  translated by the server — or, in Cockpit, by the CLI — using *its* language, which is
+  fixed at startup from the environment and has nothing to do with the language chosen in
+  the page. The screen now receives the message key and its parameters and translates
+  them itself, which is what it has the catalog for.
+- Requests carry the chosen language, and the server answers in it. Anything it still
+  renders — error messages, mainly — now follows the page instead of the environment. The
+  override is per-thread, so two requests in different languages cannot contaminate each
+  other.
+- The Cockpit transport passes `--lang` on every call, since each one starts a fresh CLI
+  that would otherwise pick the language up from the environment.
+
 ## [0.8.3] - 2026-09-23
 
 ### Changed
@@ -320,6 +336,7 @@ release contains.
 - Terminal tables are padded by display width, so East Asian full-width characters line
   up.
 
+[0.8.4]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.8.4
 [0.8.3]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.8.3
 [0.8.2]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.8.2
 [0.8.1]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.8.1

@@ -391,6 +391,11 @@ With neither, the language comes from `LC_ALL`, `LC_MESSAGES` or `LANG`, and fal
 to English; `LANG=C` means English. Only human-readable output is translated. `--json` is
 byte-identical in every language, because front-ends and scripts consume it.
 
+Nothing the screen shows is translated by the server. It receives message keys and
+their parameters and renders them from the catalog it already has, because the server's
+language is fixed at startup from the environment while the reader's is chosen in the
+page — and mixing the two shows up as one stray sentence in the wrong language.
+
 ### Adding a language
 
 Copy `en.json` to `<code>.json` — an ISO 639-1 code such as `de`, or a regional variant
