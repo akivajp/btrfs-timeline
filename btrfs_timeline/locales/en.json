@@ -22,6 +22,7 @@
   "error.not-a-directory": "not a directory: {path}",
   "error.permission-denied": "permission denied: {path}",
   "error.not-in-snapshot": "this path did not exist in snapshot {id}: {path}",
+  "error.not-our-module": "this was not installed by btrfs-timeline, refusing to remove it: {path}",
   "error.outside-root": "outside the directory this server is allowed to read: {path}",
   "error.path-required": "a path is required",
   "error.bad-request": "the request could not be understood",
@@ -86,6 +87,24 @@
   "diff.identical": "versions #{before} and #{after} are identical",
   "diff.binary": "one of the versions is binary, so there is nothing to show",
   "diff.truncated": "(the diff was cut short)",
+
+  "preview.command": "show the contents of a previous version",
+  "preview.argument.path": "file to show",
+  "preview.option.index": "version number as listed by \"history\" (default: the newest version found in snapshots)",
+  "preview.option.limit": "stop reading after this many bytes (default: {default})",
+  "preview.binary": "that version is binary; use a redirect if you want the bytes",
+  "preview.truncated": "(only the beginning is shown; raise --limit for more)",
+
+  "config.command": "report what the user interfaces need to start up",
+  "config.language": "language: {language}",
+
+  "cockpit.command": "install the Cockpit module, or remove it",
+  "cockpit.argument.action": "install, uninstall, or path to print where it would go",
+  "cockpit.option.system": "install for every user under /usr/share/cockpit (needs root)",
+  "cockpit.installed": "installed the Cockpit module at {path}",
+  "cockpit.next-step": "open Cockpit and look under Tools for \"File history\". No restart is needed.",
+  "cockpit.uninstalled": "removed {path}",
+  "cockpit.not-installed": "nothing to remove at {path}",
 
   "serve.command": "run the standalone web UI",
   "serve.option.host": "address to listen on (default: {default})",

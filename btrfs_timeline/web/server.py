@@ -19,8 +19,8 @@ import logging
 import os
 from typing import Optional
 
-from .. import __version__, i18n
-from ..cli import entry_to_dict, snapshot_to_dict, version_to_dict
+from .. import i18n
+from ..cli import config_payload, entry_to_dict, snapshot_to_dict, version_to_dict
 from ..core import browse as browse_module
 from ..core import diff as diff_module
 from ..core import history as history_module
@@ -142,21 +142,11 @@ def create_app(settings: Settings, credentials: Optional[Credentials] = None):
         翻訳カタログもここに含める。CLI と同じ JSON カタログをそのまま使えるのが、
         gettext ではなく JSON を選んだ理由そのものである。
         """
-        language = i18n.detect_language(bottle.request.query.get('lang') or None)
-        catalog = dict(i18n.load_catalog(i18n.FALLBACK_LANGUAGE))
-        catalog.update(i18n.load_catalog(language))
-        return {
-            'version': __version__,
-            'language': language,
-            # 表示名はカタログ自身が持つ。言語切り替えの UI で
-            # 自分の言語を自分の言葉で選べるようにするため
-            'languages': [{'code': code, 'name': name}
-                          for code, name in sorted(i18n.language_names().items())],
-            'catalog': catalog,
-            'read_only': settings.read_only,
-            'root': settings.root,
-            'start_path': settings.root or os.path.expanduser('~'),
-        }
+        # 組み立ては cli が持っている。Cockpit モジュールは同じものを
+        # ``btrfs-timeline config --json`` として受け取るので、ここで作り直さない
+        return config_payload(
+            bottle.request.query.get('lang') or None,
+            read_only=settings.read_only, root=settings.root)
 
     @app.route('/api/mounts')
     def api_mounts():

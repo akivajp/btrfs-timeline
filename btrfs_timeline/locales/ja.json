@@ -22,6 +22,7 @@
   "error.not-a-directory": "ディレクトリではありません: {path}",
   "error.permission-denied": "読み取り権限がありません: {path}",
   "error.not-in-snapshot": "スナップショット {id} の時点には存在しませんでした: {path}",
+  "error.not-our-module": "btrfs-timeline が設置したものではないため、削除しません: {path}",
   "error.outside-root": "このサーバーが読み取りを許可された範囲の外です: {path}",
   "error.path-required": "パスを指定してください",
   "error.bad-request": "リクエストを解釈できませんでした",
@@ -86,6 +87,24 @@
   "diff.identical": "版 #{before} と #{after} は同一です",
   "diff.binary": "どちらかの版がバイナリのため、表示するものがありません",
   "diff.truncated": "(差分を途中で打ち切りました)",
+
+  "preview.command": "過去の版の内容を表示する",
+  "preview.argument.path": "表示するファイル",
+  "preview.option.index": "\"history\" が表示する版番号 (既定: スナップショット内の最新の版)",
+  "preview.option.limit": "読み出しをこのバイト数で打ち切る (既定: {default})",
+  "preview.binary": "その版はバイナリです。中身が必要な場合はリダイレクトしてください",
+  "preview.truncated": "(冒頭のみを表示しています。続きが必要なら --limit を増やしてください)",
+
+  "config.command": "各ユーザーインターフェースが起動時に必要とする設定を出力する",
+  "config.language": "言語: {language}",
+
+  "cockpit.command": "Cockpit モジュールを設置する / 取り除く",
+  "cockpit.argument.action": "install（設置）、uninstall（削除）、path（設置先の表示）",
+  "cockpit.option.system": "/usr/share/cockpit に全ユーザー向けで設置する (root が必要)",
+  "cockpit.installed": "Cockpit モジュールを {path} に設置しました",
+  "cockpit.next-step": "Cockpit を開き、ツールの中の \"File history\" を選んでください。再起動は不要です。",
+  "cockpit.uninstalled": "{path} を削除しました",
+  "cockpit.not-installed": "{path} には何もありません",
 
   "serve.command": "スタンドアロンの Web UI を起動する",
   "serve.option.host": "待ち受けアドレス (既定: {default})",

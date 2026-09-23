@@ -143,6 +143,32 @@ def entry_to_dict(entry: browse_module.Entry) -> dict:
     }
 
 
+def config_payload(language: Optional[str] = None, read_only: bool = False,
+                   root: Optional[str] = None,
+                   start_path: Optional[str] = None) -> dict:
+    """画面が起動時に必要とするものを 1 つにまとめて返す。
+
+    スタンドアロン Web UI は ``/api/config`` として、Cockpit モジュールは
+    ``btrfs-timeline config --json`` として、これと同じものを受け取る。
+    **組み立てを 1 箇所にしておかないと、フロントエンドごとに少しずつ違うものを
+    渡すことになる。** 翻訳カタログを含めているのは、ブラウザ側も CLI と同じ訳文を
+    引くためで、カタログを JSON にした理由そのものでもある。
+    """
+    selected = i18n.detect_language(language)
+    catalog = dict(i18n.load_catalog(i18n.FALLBACK_LANGUAGE))
+    catalog.update(i18n.load_catalog(selected))
+    return {
+        'version': __version__,
+        'language': selected,
+        'languages': [{'code': code, 'name': name}
+                      for code, name in sorted(i18n.language_names().items())],
+        'catalog': catalog,
+        'read_only': read_only,
+        'root': root,
+        'start_path': start_path or root or os.path.expanduser('~'),
+    }
+
+
 def _emit_json(payload: Any) -> None:
     """JSON を標準出力に書き出す (機械可読出力の唯一の経路)。"""
     json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
@@ -204,24 +230,28 @@ def _resolve_restore_source(target, args, mount, snapshot_list):
     「argparse の引数を解釈し、表示用のラベルを付ける」ことだけ。
 
     Returns:
-        ``(source, moment, label)``。決められない場合は ``(None, None, 翻訳済みの理由)``。
+        ``(source, moment, label, index)``。決められない場合は
+        ``(None, None, 翻訳済みの理由, None)``。``index`` は版番号
+        (``--snapshot`` で指定された場合は None)。
     """
     if args.snapshot:
         snapshot = next((s for s in snapshot_list if s.id == args.snapshot), None)
         if snapshot is None:
-            return None, None, _('error.snapshot-not-found', id=args.snapshot)
+            return None, None, _('error.snapshot-not-found', id=args.snapshot), None
         source = history_module.path_in_snapshot(snapshot, target, mount=mount)
         return source, snapshot.taken_at, _(
-            'restore.label.snapshot', id=snapshot.id, moment=_local(snapshot.taken_at))
+            'restore.label.snapshot', id=snapshot.id,
+            moment=_local(snapshot.taken_at)), None
 
     versions = history_module.list_versions(target, snapshot_list=snapshot_list, mount=mount)
     try:
         index, version = history_module.select_version(versions, args.index)
     except LookupError as error:
-        return None, None, str(error)
+        return None, None, str(error), None
 
     return version.path, version.first_seen, _(
-        'restore.label.version', index=index, moment=_local(version.first_seen))
+        'restore.label.version', index=index,
+        moment=_local(version.first_seen)), index
 
 
 def cmd_restore(args: argparse.Namespace) -> int:
@@ -237,7 +267,8 @@ def cmd_restore(args: argparse.Namespace) -> int:
         return 1
     snapshot_list = snapshots_module.discover(mount)
 
-    source, moment, label = _resolve_restore_source(target, args, mount, snapshot_list)
+    source, moment, label, index = _resolve_restore_source(
+        target, args, mount, snapshot_list)
     if source is None:
         # label には翻訳済みの理由が入っている
         print(_('error.prefix', message=label), file=sys.stderr)
@@ -257,6 +288,7 @@ def cmd_restore(args: argparse.Namespace) -> int:
     if args.json:
         _emit_json({
             'target': target,
+            'index': index,
             'source': plan.source,
             'destination': plan.destination,
             'in_place': plan.in_place,
@@ -409,6 +441,92 @@ def cmd_diff(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_config(args: argparse.Namespace) -> int:
+    """画面が起動時に必要とする設定を返す。
+
+    Cockpit モジュールにはサーバーが無く、``/api/config`` を叩けない。
+    そちらはこのサブコマンドを ``cockpit.spawn`` で呼ぶ。
+    """
+    payload = config_payload(args.lang)
+    if args.json:
+        _emit_json(payload)
+        return 0
+    print(_('config.language', language=payload['language']))
+    for entry in payload['languages']:
+        print('  {0:<8} {1}'.format(entry['code'], entry['name']))
+    return 0
+
+
+def cmd_preview(args: argparse.Namespace) -> int:
+    """ある版の中身を表示する。
+
+    「どの版に戻すか」は中身を見ないと決められないので、復元と対になる操作である。
+    既定では標準出力にそのまま書くので、``btrfs-timeline preview notes.md > old.md``
+    のようにも使える。
+    """
+    target = os.path.abspath(args.path)
+    try:
+        versions = history_module.list_versions(target)
+        index, version = history_module.select_version(versions, args.index)
+    except LookupError as error:
+        print(_('error.prefix', message=error), file=sys.stderr)
+        return 1
+
+    content = diff_module.read_text(version.path, args.limit)
+
+    if args.json:
+        _emit_json({
+            'path': version.path, 'index': index, 'size': version.size,
+            'binary': content.binary, 'truncated': content.truncated,
+            'text': content.text,
+        })
+        return 0
+
+    if content.binary:
+        print(_('preview.binary'), file=sys.stderr)
+        return 1
+    sys.stdout.write(content.text)
+    if content.truncated:
+        print(_('preview.truncated'), file=sys.stderr)
+    return 0
+
+
+def cmd_cockpit(args: argparse.Namespace) -> int:
+    """Cockpit モジュールを設置する / 取り除く。
+
+    pip で入れると画面のファイルは site-packages の中にあり、Cockpit からは見えない。
+    その橋渡しだけを行う。
+    """
+    from .cockpit import install, is_ours, target_directory, uninstall
+
+    directory = target_directory(args.system)
+
+    if args.action == 'path':
+        print(directory)
+        return 0
+
+    if args.action == 'uninstall':
+        try:
+            removed = uninstall(args.system)
+        except OSError as error:
+            print(_('error.prefix', message=error), file=sys.stderr)
+            return 1
+        if removed is None:
+            print(_('cockpit.not-installed', path=directory))
+            return 0
+        print(_('cockpit.uninstalled', path=removed))
+        return 0
+
+    try:
+        installed = install(args.system)
+    except OSError as error:
+        print(_('error.prefix', message=error), file=sys.stderr)
+        return 1
+    print(_('cockpit.installed', path=installed))
+    print(_('cockpit.next-step'))
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     """スタンドアロンの Web UI を起動する。
 
@@ -522,6 +640,34 @@ def build_parser() -> argparse.ArgumentParser:
     diff_parser.add_argument('--json', action='store_true', help=_('cli.option.json'))
     _add_language_option(diff_parser)
     diff_parser.set_defaults(func=cmd_diff)
+
+    # --- preview
+    preview_parser = subparsers.add_parser('preview', help=_('preview.command'))
+    preview_parser.add_argument('path', help=_('preview.argument.path'))
+    preview_parser.add_argument('--index', type=int, metavar='N',
+                                help=_('preview.option.index'))
+    preview_parser.add_argument('--limit', type=int, default=diff_module.DEFAULT_LIMIT,
+                                metavar='BYTES',
+                                help=_('preview.option.limit',
+                                       default=diff_module.DEFAULT_LIMIT))
+    preview_parser.add_argument('--json', action='store_true', help=_('cli.option.json'))
+    _add_language_option(preview_parser)
+    preview_parser.set_defaults(func=cmd_preview)
+
+    # --- config
+    config_parser = subparsers.add_parser('config', help=_('config.command'))
+    config_parser.add_argument('--json', action='store_true', help=_('cli.option.json'))
+    _add_language_option(config_parser)
+    config_parser.set_defaults(func=cmd_config)
+
+    # --- cockpit
+    cockpit_parser = subparsers.add_parser('cockpit', help=_('cockpit.command'))
+    cockpit_parser.add_argument('action', choices=('install', 'uninstall', 'path'),
+                                help=_('cockpit.argument.action'))
+    cockpit_parser.add_argument('--system', action='store_true',
+                                help=_('cockpit.option.system'))
+    _add_language_option(cockpit_parser)
+    cockpit_parser.set_defaults(func=cmd_cockpit)
 
     # --- serve
     serve_parser = subparsers.add_parser('serve', help=_('serve.command'))

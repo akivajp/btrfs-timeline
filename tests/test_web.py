@@ -10,6 +10,7 @@
   閲覧専用なら書かせない。どれも破れたときの被害が大きい。
 """
 
+import json
 import os
 
 import pytest
@@ -62,7 +63,8 @@ def tree(tmp_path, monkeypatch):
 
 
 def make_app(tree, **options):
-    settings = server_module.Settings(root=str(tree), **{
+    options.setdefault('root', str(tree))
+    settings = server_module.Settings(**{
         k: v for k, v in options.items() if k != 'credentials'})
     return webtest.TestApp(
         server_module.create_app(settings, options.get('credentials')))
@@ -417,3 +419,52 @@ def test_hidden_entries_are_excluded_in_past_listings_too(dotted_tree):
     ).json['entries']]
     assert '.bashrc' not in hidden
     assert 'notes.txt' in hidden
+
+
+# --------------------------------------------------------------------------
+# CLI と HTTP API が同じものを返すこと
+# --------------------------------------------------------------------------
+
+def _cli_json(capsys, argv):
+    """CLI をその場で走らせ、``--json`` の出力を読む。"""
+    from btrfs_timeline import cli
+
+    capsys.readouterr()
+    assert cli.main(argv) == 0
+    return json.loads(capsys.readouterr().out)
+
+
+@pytest.mark.parametrize('argv,url,params', [
+    (['browse', '{root}', '--json'], '/api/browse', {'path': '{root}'}),
+    (['browse', '{root}', '--snapshot', '1', '--json'],
+     '/api/browse', {'path': '{root}', 'snapshot': '1'}),
+    (['history', '{root}/notes.txt', '--json'],
+     '/api/history', {'path': '{root}/notes.txt'}),
+    (['preview', '{root}/notes.txt', '--index', '1', '--json'],
+     '/api/preview', {'path': '{root}/notes.txt', 'index': 1}),
+    (['diff', '{root}/notes.txt', '--from', '1', '--json'],
+     '/api/diff', {'path': '{root}/notes.txt', 'from': 1}),
+])
+def test_cli_and_http_return_the_same_json(tree, capsys, argv, url, params):
+    """同じ問いに対して、CLI と HTTP API が同じ答えを返す。
+
+    Cockpit モジュールは HTTP を使えず CLI の ``--json`` だけを頼りにする。
+    ここがずれると、**同じ画面コードが経路によって違う動きをする** ことになり、
+    「フロントエンドで共有できる契約は JSON を吐く CLI」という前提が崩れる。
+    """
+    # CLI には閉じ込めが無いので、比較する側のサーバーも --root 無しで立てる。
+    # 閉じ込めはサーバーの設定であって、返す JSON の形の違いではない。
+    app = make_app(tree, root=None)
+    root = str(tree)
+    from_cli = _cli_json(capsys, [a.format(root=root) for a in argv])
+    from_http = app.get(url, {k: (v.format(root=root) if isinstance(v, str) else v)
+                              for k, v in params.items()}).json
+    assert from_cli == from_http
+
+
+def test_cli_and_http_agree_on_the_startup_config(app, capsys):
+    """起動時の設定も同じ。Cockpit 版はこれを ``config --json`` から受け取る。"""
+    from_cli = _cli_json(capsys, ['config', '--lang', 'ja', '--json'])
+    from_http = app.get('/api/config?lang=ja').json
+    for key in ('version', 'language', 'languages', 'catalog'):
+        assert from_cli[key] == from_http[key], key

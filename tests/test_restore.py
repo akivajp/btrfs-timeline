@@ -276,11 +276,14 @@ def test_default_selection_is_the_newest_snapshot_version(tmp_path):
     from btrfs_timeline import cli
 
     target, mount, snapshot_list = _history_fixture(tmp_path)
-    source, _moment, label = cli._resolve_restore_source(target, _args(), mount, snapshot_list)
+    source, _moment, label, index = cli._resolve_restore_source(
+        target, _args(), mount, snapshot_list)
 
     assert source is not None
     assert open(source, encoding='utf-8').read() == 'second'
     assert '#' in label
+    # 版番号も返す。復元の JSON 出力に載せて、Web UI と形を揃えるため
+    assert index == 2
 
 
 def test_selection_by_snapshot_id(tmp_path):
@@ -288,10 +291,12 @@ def test_selection_by_snapshot_id(tmp_path):
     from btrfs_timeline import cli
 
     target, mount, snapshot_list = _history_fixture(tmp_path)
-    source, _moment, _label = cli._resolve_restore_source(
+    source, _moment, _label, index = cli._resolve_restore_source(
         target, _args(snapshot='1'), mount, snapshot_list)
 
     assert open(source, encoding='utf-8').read() == 'first'
+    # スナップショット指定では版番号が決まらないので None
+    assert index is None
 
 
 def test_selection_rejects_the_live_version(tmp_path):
@@ -300,7 +305,7 @@ def test_selection_rejects_the_live_version(tmp_path):
 
     target, mount, snapshot_list = _history_fixture(tmp_path)
     # 版は [first, second, live] の 3 行になるので、3 番がライブ版
-    source, _moment, reason = cli._resolve_restore_source(
+    source, _moment, reason, _index = cli._resolve_restore_source(
         target, _args(index=3), mount, snapshot_list)
 
     assert source is None
