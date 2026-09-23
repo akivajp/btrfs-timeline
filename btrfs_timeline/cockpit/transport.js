@@ -24,8 +24,25 @@ import { COMMAND } from './command.js';
 // どちらの経路で動いているか。画面はこれを見て、できないことの理由を説明する。
 export const FLAVOUR = 'cockpit';
 
-// Cockpit には利用者自身の資格で昇格する仕組みがあるので、頼むことができる。
-export const canElevate = true;
+// Cockpit には利用者自身の資格で昇格する仕組みがあり、**その UI は Cockpit の
+// ヘッダーが持っている**。こちらから昇格を強いることはしない — 試したところ、
+// 応答が返らないまま画面が待ち続ける状態になった。代わりに切り替えを監視し、
+// 有効になったら勝手に読み直す。**押しても何も起きないボタンは置かない。**
+export const canElevate = false;
+
+/**
+ * 管理アクセスの状態が変わったら知らせる。
+ *
+ * Cockpit のヘッダーで切り替えた瞬間に画面が追随するので、利用者は
+ * 「読み直す」という手順を覚えなくてよい。
+ */
+export const onPrivilegeChange = async (handler) => {
+  const cockpit = await loadCockpit();
+  if (!cockpit || typeof cockpit.permission !== 'function') return null;
+  const permission = cockpit.permission({ admin: true });
+  permission.addEventListener('changed', () => handler(permission.allowed));
+  return permission;
+};
 
 // cockpit.js は素のスクリプトで window.cockpit を定義する (ES モジュールではない)。
 // index.html に script タグを足せば済むが、それをすると HTML が
@@ -71,15 +88,13 @@ export const fetchBrowse = (path, snapshot, showHidden) => run([
 
 export const fetchHistory = (path) => run(['history', path]);
 
-export const fetchDevices = async (elevate) => {
+export const fetchDevices = async () => {
   // 割り当ての内訳は root でしか読めない。
   //
-  // 既定は 'try' — 管理アクセスが既に有効なら内訳が得られ、そうでなければ
-  // 内訳が落ちるだけで残りは変わらない。**黙って昇格を求めない。**
-  // 'require' は、利用者が画面から明示的に頼んだときだけ使う。そのとき初めて
-  // Cockpit が昇格を尋ねる。
-  const payload = await run(['devices', '--usage'],
-                            { superuser: elevate ? 'require' : 'try' });
+  // 'try' なので、管理アクセスが既に有効なら内訳が得られ、そうでなければ
+  // 内訳が落ちるだけで残りは変わらない。**こちらから昇格を求めることはしない** —
+  // それは Cockpit のヘッダーの仕事であり、利用者が決めることである。
+  const payload = await run(['devices', '--usage'], { superuser: 'try' });
   // HTTP 版は「端末で実行すべきコマンド」も返す。Cockpit 版では
   // CLI がそこまで面倒を見ないので、画面が同じ形を受け取れるよう補う。
   return { ...payload, suggestions: payload.suggestions || [] };

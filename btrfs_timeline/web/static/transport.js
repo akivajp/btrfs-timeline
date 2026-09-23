@@ -48,7 +48,10 @@ export const fetchBrowse = (path, snapshot, showHidden) =>
 
 export const fetchHistory = (path) => request(`./api/history?${query(path)}`);
 
-export const fetchDevices = (_elevate) => request('./api/devices');
+export const fetchDevices = () => request('./api/devices');
+
+// この経路に権限の切り替えは無い。何も起きない口だけ揃えておく
+export const onPrivilegeChange = async (_handler) => null;
 
 export const fetchScrub = (path) => request(`./api/scrub?${query(path)}`);
 

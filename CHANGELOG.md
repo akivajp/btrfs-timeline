@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-09-23
+
+### Fixed
+
+- **The link between the two pages was broken inside Cockpit.** It pointed at `./`,
+  which the standalone server happily answers but a Cockpit package cannot: packages
+  serve files by name and have no notion of a directory, so it landed on
+  `Invalid HTTP path /btrfs-timeline/`. Both pages now link by file name, and a test
+  refuses `href="./"` in either.
+- **The "show it with administrative access" button did nothing and left the page saying
+  "loading".** Asking for elevation from inside the module got no answer back, and the
+  failure had no handler, so the status line never cleared. The button is gone — the
+  elevation UI belongs to Cockpit's header, and a control that cannot deliver is worse
+  than none.
+- The page now watches `cockpit.permission({admin: true})` and reloads itself when
+  administrative access is switched on, so nobody has to know to refresh.
+- Errors during a reload no longer leave the status stuck on "loading".
+
 ## [0.8.1] - 2026-09-23
 
 ### Added
@@ -293,6 +311,7 @@ release contains.
 - Terminal tables are padded by display width, so East Asian full-width characters line
   up.
 
+[0.8.2]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.8.2
 [0.8.1]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.8.1
 [0.8.0]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.8.0
 [0.7.1]: https://github.com/akivajp/btrfs-timeline/releases/tag/v0.7.1

@@ -356,8 +356,8 @@ Nothing else in the module asks for privilege.
 
 The standalone server does not show it, and offers `btrfs device usage` as a command
 instead. When the breakdown is missing, the dashboard says why, and the reason differs by
-front-end: Cockpit under restricted access gets a button that asks for elevation, while
-standalone points at the Cockpit module. "You lack the privilege" and "this route cannot
+front-end: Cockpit under restricted access points at the toggle in its own header — and reloads
+itself when you use it — while standalone points at the Cockpit module. "You lack the privilege" and "this route cannot
 do it" are different situations, and reading the same sentence for both helps nobody.
 
 Privileged *operations* — scrub, balance, device changes — are still run from a terminal

@@ -9,7 +9,7 @@
 // 失敗するボタンは無いほうがよい。
 
 import {
-  FLAVOUR, canElevate, fetchConfig, fetchDevices, fetchScrub,
+  FLAVOUR, canElevate, fetchConfig, fetchDevices, fetchScrub, onPrivilegeChange,
 } from './transport.js';
 import { translate } from './i18n.js';
 
@@ -229,19 +229,14 @@ const renderLanguageOptions = () => {
 
 // 内訳が出せない理由は経路によって違う。「権限が足りない」と「この経路では無理」は
 // 利用者にとって別の話なので、同じ文言で済ませない。
-const renderElevationHint = (dashboard, elevated) => {
+const renderElevationHint = (dashboard) => {
   const section = node('section', 'filesystem hint');
   section.append(node('h2', null, t('web.elevate.title')));
   section.append(node('p', 'note', t(
     FLAVOUR === 'cockpit' ? 'web.elevate.cockpit' : 'web.elevate.standalone')));
-
-  if (canElevate && !elevated) {
-    const button = node('button', null, t('web.elevate.action'));
-    button.type = 'button';
-    // ここで初めて Cockpit が昇格を尋ねる。黙って求めることはしない
-    button.addEventListener('click', () => load(true));
-    section.append(button);
-  }
+  // ボタンは置かない。昇格の UI は Cockpit のヘッダーが持っており、
+  // こちらから促しても応答が返らないまま待ち続けるだけだった。
+  // 切り替えは監視しているので、有効にすれば勝手に読み直す
   dashboard.append(section);
 };
 
@@ -249,9 +244,9 @@ const hasBreakdown = (filesystems) => filesystems.some(
   (filesystem) => filesystem.devices.some(
     (device) => device.usage && Object.keys(device.usage.allocations || {}).length));
 
-const load = async (elevate) => {
+const load = async () => {
   setStatus(t('web.loading'));
-  const data = await fetchDevices(elevate);
+  const data = await fetchDevices();
   const dashboard = el('dashboard');
   dashboard.replaceChildren();
 
@@ -270,7 +265,7 @@ const load = async (elevate) => {
   }
 
   if (!hasBreakdown(data.filesystems)) {
-    renderElevationHint(dashboard, Boolean(elevate));
+    renderElevationHint(dashboard);
   }
 
   if ((data.suggestions || []).length) {
@@ -285,6 +280,16 @@ const load = async (elevate) => {
   setStatus('');
 };
 
+// **どの経路から呼ばれても、失敗が「読み込み中…」のまま残らないようにする。**
+// 昇格を頼んで断られたときにここが無く、画面が固まったままになっていた。
+const guarded = async (action) => {
+  try {
+    await action();
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+};
+
 const changeLanguage = async (code) => {
   config = await fetchConfig(code);
   catalog = config.catalog;
@@ -294,7 +299,7 @@ const changeLanguage = async (code) => {
     // 覚えられなくても操作自体は成立している
   }
   applyLabels();
-  await load();
+  await guarded(load);
 };
 
 const start = async () => {
@@ -308,8 +313,14 @@ const start = async () => {
   catalog = config.catalog;
   renderLanguageOptions();
   applyLabels();
-  el('language').addEventListener('change', (event) => changeLanguage(event.target.value));
-  await load();
+  el('language').addEventListener('change',
+    (event) => guarded(() => changeLanguage(event.target.value)));
+
+  // 管理アクセスを切り替えたら、その場で読み直す。利用者に「更新する」という
+  // 手順を覚えさせない
+  await onPrivilegeChange(() => guarded(load));
+
+  await guarded(load);
 };
 
 start().catch((error) => setStatus(error.message, true));

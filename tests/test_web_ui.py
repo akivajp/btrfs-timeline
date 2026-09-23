@@ -400,8 +400,9 @@ def test_cockpit_offers_to_elevate(dashboard_cockpit_without_usage):
     """**権限が足りないだけ**なので、その場で頼める。"""
     rendered = dashboard_cockpit_without_usage['rendered']
     assert 'administrative access' in rendered
-    # その場で頼めるので、ボタンを出す
-    assert 'Show it with administrative access' in rendered
+    # **押しても応答が返らないボタンは置かない。** 昇格の UI は Cockpit の
+    # ヘッダーが持っているので、そこを指すに留める
+    assert 'Show it with administrative access' not in rendered
     # 「別のものを入れてください」とは言わない。権限が足りないだけ
     assert 'cockpit install' not in rendered
 
@@ -411,3 +412,21 @@ def test_the_rest_of_the_screen_still_works_without_root(dashboard_without_usage
     assert dashboard_without_usage['failures'] == []
     assert '/dev/sdd1' in dashboard_without_usage['rendered']
     assert '38 °C' in dashboard_without_usage['rendered']
+
+
+# --------------------------------------------------------------------------
+# ページ間のリンク (Cockpit には「ディレクトリ」が無い)
+# --------------------------------------------------------------------------
+
+def test_pages_link_by_file_name_not_by_directory():
+    """``./`` は Cockpit で解決できず ``Invalid HTTP path`` になる。
+
+    標準のサーバーでは ``/`` がページを返すので気付けないが、Cockpit の
+    パッケージはファイルを名前で配るだけで、ディレクトリの概念が無い。
+    """
+    for name in ('index.html', 'devices.html'):
+        with open(os.path.join(STATIC, name), encoding='utf-8') as handle:
+            markup = handle.read()
+        assert 'href="./"' not in markup, name
+        assert 'href="./index.html"' in markup, name
+        assert 'href="./devices.html"' in markup, name

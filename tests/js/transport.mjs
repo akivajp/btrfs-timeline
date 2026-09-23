@@ -7,6 +7,7 @@
 // こちらは常に standalone。
 export const FLAVOUR = 'standalone';
 export const canElevate = false;
+export const onPrivilegeChange = async () => null;
 
 export {
   fakeConfig as fetchConfig,
