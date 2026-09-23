@@ -9,6 +9,12 @@ Mac の Time Machine のような感覚で。
 > 利用できます。次は Cockpit モジュールを実装します。
 > [ロードマップ](#ロードマップ)を参照してください。
 
+![Web UI。左がファイル一覧、右が選択したファイルの版の一覧で、各版にプレビューと復元のボタンが並んでいる](https://raw.githubusercontent.com/akivajp/btrfs-timeline/main/docs/screenshot-ja.png)
+
+1つのファイルに4行。まだ存在していなかった期間、それ以降に取った2つの内容、
+そして現在のファイルです。元になったスナップショットは48個ありますが、
+何も変わっていない分は行にする価値がありません。
+
 ## なぜ作るのか
 
 snapper や btrbk、Timeshift で自動スナップショットを取っていれば、
