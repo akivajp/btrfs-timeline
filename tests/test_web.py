@@ -97,7 +97,9 @@ def test_config_carries_the_translation_catalog(app):
     data = app.get('/api/config?lang=ja').json
     assert data['language'] == 'ja'
     assert data['catalog']['web.restore'] == '復元'
-    assert 'en' in data['languages']
+    # 言語の表示名はカタログ自身が持つ (自分の言語を自分の言葉で選べるように)
+    assert {'code': 'ja', 'name': '日本語'} in data['languages']
+    assert {'code': 'en', 'name': 'English'} in data['languages']
 
 
 def test_english_can_be_requested_explicitly(app):
@@ -113,7 +115,7 @@ def test_unknown_language_still_returns_a_usable_catalog(app):
     弾くのではなく無視する。
     """
     data = app.get('/api/config?lang=xx').json
-    assert data['language'] in data['languages']
+    assert data['language'] in [entry['code'] for entry in data['languages']]
     assert data['catalog']['web.restore']
 
 
@@ -365,3 +367,40 @@ def test_diff_rejects_an_unknown_version(app, tree):
     response = app.get('/api/diff', {'path': str(tree / 'notes.txt'), 'from': 99},
                        expect_errors=True)
     assert response.status_int == 404
+
+
+# --------------------------------------------------------------------------
+# 隠しファイルの扱い
+# --------------------------------------------------------------------------
+
+@pytest.fixture
+def dotted_tree(tree):
+    """ドットファイルを、現在にもスナップショットにも置く。"""
+    (tree / '.bashrc').write_text('live rc', encoding='utf-8')
+    (tree / '.snapshots' / '1' / 'snapshot' / '.bashrc').write_text('old rc',
+                                                                   encoding='utf-8')
+    return tree
+
+
+def test_hidden_entries_can_be_excluded(dotted_tree):
+    """ホームディレクトリ直下が設定ファイルで埋もれるのを避けられる。"""
+    app = make_app(dotted_tree)
+    shown = [e['name'] for e in app.get(
+        '/api/browse', {'path': str(dotted_tree)}).json['entries']]
+    hidden = [e['name'] for e in app.get(
+        '/api/browse', {'path': str(dotted_tree), 'show_hidden': '0'}).json['entries']]
+
+    assert '.bashrc' in shown
+    assert '.bashrc' not in hidden
+    assert 'notes.txt' in hidden
+
+
+def test_hidden_entries_are_excluded_in_past_listings_too(dotted_tree):
+    """過去の時点でも同じ設定が効く (片方だけ効くと混乱する)。"""
+    app = make_app(dotted_tree)
+    hidden = [e['name'] for e in app.get(
+        '/api/browse',
+        {'path': str(dotted_tree), 'snapshot': '1', 'show_hidden': '0'},
+    ).json['entries']]
+    assert '.bashrc' not in hidden
+    assert 'notes.txt' in hidden

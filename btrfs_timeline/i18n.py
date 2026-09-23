@@ -53,6 +53,20 @@ def available_languages() -> list:
     return sorted(name[:-len('.json')] for name in entries if name.endswith('.json'))
 
 
+def language_names() -> dict:
+    """言語コードと、その言語自身による表示名の対応を返す。
+
+    表示名をカタログ自身 (``language.name``) に持たせているのは、
+    **翻訳者が自分の言語の呼び名を決められるようにするため**。
+    外から与えると "Japanese" のように他言語での呼称になってしまい、
+    言語切り替えの UI で自分の言語を見つけにくくなる。
+    """
+    names = {}
+    for code in available_languages():
+        names[code] = load_catalog(code).get('language.name') or code
+    return names
+
+
 def _candidates(value: str) -> list:
     """ロケール文字列から、探すべき言語コードの候補を優先度順に返す。
 

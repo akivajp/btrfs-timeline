@@ -133,7 +133,10 @@ def create_app(settings: Settings, credentials: Optional[Credentials] = None):
         return {
             'version': __version__,
             'language': language,
-            'languages': i18n.available_languages(),
+            # 表示名はカタログ自身が持つ。言語切り替えの UI で
+            # 自分の言語を自分の言葉で選べるようにするため
+            'languages': [{'code': code, 'name': name}
+                          for code, name in sorted(i18n.language_names().items())],
             'catalog': catalog,
             'read_only': settings.read_only,
             'root': settings.root,
@@ -153,6 +156,8 @@ def create_app(settings: Settings, credentials: Optional[Credentials] = None):
         削除されたものには辿り着けないため、これが唯一の入口になる。
         """
         snapshot_id = bottle.request.query.get('snapshot') or None
+        # 既定は「隠さない」(コアの既定に合わせる)。画面側は毎回明示して渡す
+        show_hidden = bottle.request.query.get('show_hidden', '1') != '0'
         try:
             path = checked_path(bottle.request.query.get('path'))
             snapshot = None
@@ -167,9 +172,11 @@ def create_app(settings: Settings, credentials: Optional[Credentials] = None):
                     return fail(404, i18n.translate('error.snapshot-not-found',
                                                     id=snapshot_id))
                 entries = browse_module.list_directory_at(
-                    path, snapshot, mount=mount, root=settings.root)
+                    path, snapshot, mount=mount, show_hidden=show_hidden,
+                    root=settings.root)
             else:
-                entries = browse_module.list_directory(path, root=settings.root)
+                entries = browse_module.list_directory(
+                    path, show_hidden=show_hidden, root=settings.root)
         except PermissionError as error:
             return fail(403, error)
         except (FileNotFoundError, NotADirectoryError) as error:

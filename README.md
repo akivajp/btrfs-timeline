@@ -183,6 +183,11 @@ combination of two things: a path, and a point in time.
 No tabs were added for any of this. Adding one screen per feature would mean learning the
 same "look at the past" gesture three times over.
 
+Two settings sit in the page and are remembered per browser: the **language**, picked
+from the same catalogs the CLI uses, and whether to **show hidden files** — off by
+default, because a home directory is mostly dotfiles and the things you came for get
+buried in them.
+
 It listens on loopback only by default, and it deliberately refuses to listen on any
 other address without `--auth USER:PASSWORD` (also read from `BTRFS_TIMELINE_AUTH`),
 because anyone who can reach it can read your files and write over them. `--allow-no-auth`
@@ -213,8 +218,11 @@ byte-identical in every language, because front-ends and scripts consume it.
 
 Copy `en.json` to `<code>.json` — an ISO 639-1 code such as `de`, or a regional variant
 such as `pt_br`, which falls back to `pt` if that catalog exists — and translate the
-values. **No code changes are needed.** The new language is picked up automatically,
-including in the values `--lang` accepts.
+values, starting with `language.name`, which is how your language names *itself* (`日本語`,
+not `Japanese`): that string is what the web UI's language picker shows, so someone who
+reads only your language has to be able to find it. **No code changes are needed.** The
+new language is picked up automatically, both in the values `--lang` accepts and in the
+picker.
 
 The test suite (`pytest tests/test_i18n.py`) enforces two rules:
 

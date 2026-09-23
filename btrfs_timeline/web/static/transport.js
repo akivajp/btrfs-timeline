@@ -27,11 +27,16 @@ const query = (path, extra) => {
   return params.toString();
 };
 
-export const fetchConfig = () => request('./api/config');
+// lang を渡すと、その言語のカタログが返る (画面はこれで表示言語を切り替える)。
+export const fetchConfig = (lang) =>
+  request(`./api/config${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`);
 
 // snapshot を渡すと「その時点の内容」が返る。削除された項目もそこに現れる。
-export const fetchBrowse = (path, snapshot) =>
-  request(`./api/browse?${query(path, snapshot ? { snapshot } : null)}`);
+export const fetchBrowse = (path, snapshot, showHidden) =>
+  request(`./api/browse?${query(path, {
+    ...(snapshot ? { snapshot } : null),
+    show_hidden: showHidden ? '1' : '0',
+  })}`);
 
 export const fetchHistory = (path) => request(`./api/history?${query(path)}`);
 

@@ -1,4 +1,6 @@
 {
+  "language.name": "日本語",
+
   "cli.description": "btrfs のスナップショットから、ファイルの過去の版を辿って復元します。",
   "cli.option.lang": "メッセージの言語 (例: en, ja)。既定は BTRFS_TIMELINE_LANG、次にシステムのロケール",
   "cli.option.json": "機械可読な JSON を出力する",
@@ -99,6 +101,8 @@
   "serve.auth-required": "認証なしで {host} に公開しようとしています。到達できる誰もがファイルの内容を読め、さらに上書きもできてしまうため拒否しました。--auth USER:PASSWORD を指定するか、意図的であれば --allow-no-auth を付けてください。",
   "serve.no-auth-warning": "警告: 認証なしで {host} に公開しています。到達できる誰もがファイルを読み、復元による上書きを行えます。",
 
+  "web.language": "言語",
+  "web.show-hidden": "隠しファイルを表示",
   "web.path-placeholder": "ファイルまたはディレクトリのパス",
   "web.go": "開く",
   "web.browser.title": "ファイル",

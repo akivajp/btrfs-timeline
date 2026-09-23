@@ -49,7 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   directory version re-lists the left pane at that moment, and the preview pane doubles
   as the diff view.
 
+- A language picker in the web UI, listing each language by the name it gives itself in
+  `language.name`, and a toggle for hidden files which is off by default. Both are
+  remembered in the browser.
+
 ### Changed
 
+- `/api/config` reports `languages` as `{code, name}` objects rather than bare codes.
 - The `web` extra no longer needs Jinja2: the HTML carries no server-rendered data, which
   is what lets the Cockpit module serve the same file.

@@ -21,6 +21,10 @@
     <input id="path-input" type="text" spellcheck="false" autocomplete="off">
     <button type="submit" id="path-go"></button>
   </form>
+  <label id="language-label">
+    <span id="language-text"></span>
+    <select id="language"></select>
+  </label>
 </header>
 
 <main>
@@ -29,6 +33,10 @@
     <p id="time-state">
       <span id="time-label"></span>
       <button type="button" id="time-reset" hidden></button>
+      <label id="hidden-label">
+        <input type="checkbox" id="show-hidden">
+        <span id="hidden-text"></span>
+      </label>
     </p>
     <nav id="breadcrumbs"></nav>
     <ul id="entries"></ul>

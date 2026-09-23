@@ -103,6 +103,19 @@ def test_catalogs_use_the_same_placeholders(language):
         assert _placeholders(catalog[key]) == _placeholders(template), key
 
 
+def test_each_catalog_names_itself_in_its_own_language():
+    """``language.name`` は、その言語自身による呼び名である。
+
+    言語切り替えの UI はこの値を並べる。英語名を入れてしまうと、
+    その言語しか読めない人が自分の言語を選べなくなる。
+    """
+    names = i18n.language_names()
+    assert set(names) == set(i18n.available_languages())
+    assert all(value for value in names.values()), '空の language.name があります'
+    assert len(set(names.values())) == len(names), '表示名が重複しています'
+    assert names['en'] == 'English'
+
+
 def test_every_key_used_in_code_exists_in_the_catalog():
     """Python コードが引いているキーが、英語カタログに揃っている。"""
     reference = set(_load(i18n.FALLBACK_LANGUAGE))

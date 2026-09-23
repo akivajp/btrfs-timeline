@@ -1,4 +1,6 @@
 {
+  "language.name": "English",
+
   "cli.description": "Browse and restore previous versions of files from btrfs snapshots.",
   "cli.option.lang": "language for messages (for example en or ja); defaults to BTRFS_TIMELINE_LANG, then the system locale",
   "cli.option.json": "emit machine-readable JSON",
@@ -99,6 +101,8 @@
   "serve.auth-required": "refusing to listen on {host} without authentication: anyone who can reach it could read your files and overwrite them. Pass --auth USER:PASSWORD, or --allow-no-auth if you really mean it.",
   "serve.no-auth-warning": "WARNING: listening on {host} without authentication. Anyone who can reach it can read your files and restore over them.",
 
+  "web.language": "Language",
+  "web.show-hidden": "Show hidden files",
   "web.path-placeholder": "path to a file or directory",
   "web.go": "Open",
   "web.browser.title": "Files",

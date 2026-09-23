@@ -31,6 +31,38 @@ let pendingRestore = null;
 
 const el = (id) => document.getElementById(id);
 
+// 表示言語と隠しファイルの扱いは「この人のこのブラウザでの見え方の好み」であって、
+// サーバーが持つべき状態ではない。localStorage が使えない環境 (プライベート
+// ウィンドウ、サイトデータの遮断) でも画面が壊れないよう、失敗は黙って諦める。
+const STORAGE_LANGUAGE = 'btrfs-timeline.language';
+const STORAGE_HIDDEN = 'btrfs-timeline.show-hidden';
+
+const remembered = (key, fallback) => {
+  try {
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : value;
+  } catch (error) {
+    return fallback;
+  }
+};
+
+const remember = (key, value) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    // 覚えられなくても、この操作自体は成立している
+  }
+};
+
+// ドットファイルは既定で隠す。ホームディレクトリ直下は、そうしないと
+// 実際に使うものが設定ファイルの山に埋もれてしまう。
+let showHidden = remembered(STORAGE_HIDDEN, '0') === '1';
+let language = remembered(STORAGE_LANGUAGE, '') || null;
+
+// 一覧の取得は必ずここを通す。隠しファイルの設定を渡し忘れると、
+// 画面のどこかだけ挙動が変わってしまう。
+const listing = (path, snapshotId) => fetchBrowse(path, snapshotId, showHidden);
+
 // CLI と同じ JSON カタログを使う。プレースホルダも同じ名前付き形式。
 const t = (key, params) => {
   const template = catalog[key] || key;
@@ -139,7 +171,7 @@ const renderEntries = (entries) => {
 };
 
 const openDirectory = async (path) => {
-  const data = await run(() => fetchBrowse(path, moment ? moment.id : null));
+  const data = await run(() => listing(path, moment ? moment.id : null));
   if (!data) return;
   directory = data.path;
   moment = data.snapshot || null;
@@ -154,7 +186,7 @@ const openDirectory = async (path) => {
 };
 
 const goToMoment = async (snapshotId) => {
-  const data = await run(() => fetchBrowse(directory, snapshotId));
+  const data = await run(() => listing(directory, snapshotId));
   if (!data) return;
   moment = data.snapshot || null;
   renderTimeState();
@@ -163,7 +195,7 @@ const goToMoment = async (snapshotId) => {
 
 const backToNow = async () => {
   moment = null;
-  const data = await run(() => fetchBrowse(directory, null));
+  const data = await run(() => listing(directory, null));
   if (!data) return;
   renderTimeState();
   renderEntries(data.entries);
@@ -265,7 +297,7 @@ const loadHistory = async (path, isDirectory) => {
 const openFile = async (path) => {
   await loadHistory(path, false);
   // 選択状態を反映するため一覧を描き直す (時点は変えない)
-  const listing = await run(() => fetchBrowse(directory, moment ? moment.id : null));
+  const listing = await run(() => listing(directory, moment ? moment.id : null));
   if (listing) renderEntries(listing.entries);
 };
 
@@ -386,6 +418,46 @@ const confirmRestore = async () => {
 // 起動
 // ---------------------------------------------------------------------------
 
+const renderLanguageOptions = () => {
+  const select = el('language');
+  select.replaceChildren();
+  (config.languages || []).forEach((entry) => {
+    const option = document.createElement('option');
+    option.value = entry.code;
+    // 表示名はカタログが自分の言語で持っている ("Japanese" ではなく "日本語")
+    option.textContent = entry.name;
+    select.append(option);
+  });
+  select.value = config.language;
+};
+
+const changeLanguage = async (code) => {
+  const next = await run(() => fetchConfig(code));
+  if (!next) return;
+  config = next;
+  catalog = config.catalog;
+  language = config.language;
+  remember(STORAGE_LANGUAGE, language);
+  applyLabels();
+  renderTimeState();
+  // 読み込み直さずに、画面に出ているものだけ描き直す
+  const data = await run(() => listing(directory, moment ? moment.id : null));
+  if (data) renderEntries(data.entries);
+  if (target) renderVersions();
+  if (selectedVersion !== null) {
+    el('preview-title').textContent = t('web.preview.title', { index: selectedVersion });
+    renderCompareOptions();
+    await refreshPreview();
+  }
+};
+
+const toggleHidden = async (checked) => {
+  showHidden = checked;
+  remember(STORAGE_HIDDEN, checked ? '1' : '0');
+  const data = await run(() => listing(directory, moment ? moment.id : null));
+  if (data) renderEntries(data.entries);
+};
+
 const applyLabels = () => {
   document.documentElement.lang = config.language;
   el('path-input').placeholder = t('web.path-placeholder');
@@ -393,6 +465,8 @@ const applyLabels = () => {
   el('browser-title').textContent = t('web.browser.title');
   el('timeline-title').textContent = t('web.timeline.title');
   el('diff-against-text').textContent = t('web.diff.against');
+  el('language-text').textContent = t('web.language');
+  el('hidden-text').textContent = t('web.show-hidden');
   el('in-place-text').textContent = t('web.restore.in-place');
   el('restore-cancel').textContent = t('web.restore.cancel');
   el('restore-confirm').textContent = t('web.restore.confirm');
@@ -410,8 +484,11 @@ const setMode = (mode) => {
 };
 
 const start = async () => {
-  config = await fetchConfig();
+  config = await fetchConfig(language);
   catalog = config.catalog;
+  language = config.language;
+  el('show-hidden').checked = showHidden;
+  renderLanguageOptions();
   applyLabels();
 
   el('path-form').addEventListener('submit', (event) => {
@@ -420,7 +497,7 @@ const start = async () => {
     if (!value) return;
     // ディレクトリなら移動、ファイルなら履歴を出す。
     // 利用者にどちらかを選ばせる必要は無いので、開いてみて判断する。
-    fetchBrowse(value, moment ? moment.id : null)
+    listing(value, moment ? moment.id : null)
       .then(() => openDirectory(value))
       .catch(() => {
         directory = value.replace(/\/[^/]*$/, '') || '/';
@@ -429,6 +506,8 @@ const start = async () => {
   });
 
   el('time-reset').addEventListener('click', backToNow);
+  el('language').addEventListener('change', (event) => changeLanguage(event.target.value));
+  el('show-hidden').addEventListener('change', (event) => toggleHidden(event.target.checked));
   el('mode-content').addEventListener('click', () => setMode('content'));
   el('mode-diff').addEventListener('click', () => setMode('diff'));
   el('diff-against').addEventListener('change', refreshPreview);
